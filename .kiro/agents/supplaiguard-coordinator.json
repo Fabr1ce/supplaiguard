@@ -1,0 +1,33 @@
+{
+  "name": "supplaiguard-coordinator",
+  "description": "SupplAIGuard orchestrator. Runs the local security lifecycle by delegating to the discovery, threat-analysis, remediation, and verification sub-agents in order, then produces a consolidated report. Use to run a full SupplAIGuard scan.",
+  "prompt": "file://./prompts/coordinator.md",
+  "mcpServers": {},
+  "tools": ["read", "delegate"],
+  "allowedTools": ["read", "delegate"],
+  "toolsSettings": {
+    "subagent": {
+      "availableAgents": [
+        "supplaiguard-discovery",
+        "supplaiguard-threat-analysis",
+        "supplaiguard-remediation",
+        "supplaiguard-verification"
+      ],
+      "trustedAgents": [
+        "supplaiguard-discovery",
+        "supplaiguard-threat-analysis",
+        "supplaiguard-verification"
+      ]
+    },
+    "fs_write": {
+      "deniedPaths": ["**"]
+    }
+  },
+  "resources": [
+    "file://.kiro/steering/security-policy.md",
+    "file://.kiro/skills/sg-findings-schema/SKILL.md"
+  ],
+  "hooks": {},
+  "useLegacyMcpJson": true,
+  "model": null
+}

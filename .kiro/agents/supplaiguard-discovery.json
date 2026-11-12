@@ -1,0 +1,21 @@
+{
+  "name": "supplaiguard-discovery",
+  "description": "SupplAIGuard Discovery agent. Read-only inventory of npm dependencies, MCP configurations, and agent definitions in the repository.",
+  "prompt": "file://./prompts/discovery.md",
+  "mcpServers": {},
+  "tools": ["read"],
+  "allowedTools": ["read"],
+  "toolsSettings": {
+    "fs_write": {
+      "deniedPaths": ["**"]
+    }
+  },
+  "resources": [
+    "file://.kiro/steering/security-policy.md",
+    "file://.kiro/skills/sg-npm-inventory/SKILL.md",
+    "file://.kiro/skills/sg-findings-schema/SKILL.md"
+  ],
+  "hooks": {},
+  "useLegacyMcpJson": true,
+  "model": null
+}

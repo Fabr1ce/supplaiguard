@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "supplaiguard-verify-after-remediation",
+      "description": "After a write tool modifies files (e.g. a remediation edit), request verification that findings are truly resolved.",
+      "trigger": "PostToolUse",
+      "matcher": "^(fs_write|fs_append|str_replace)$",
+      "action": {
+        "type": "agent",
+        "prompt": "Files were just modified. If this was a SupplAIGuard remediation, run the supplaiguard-verification agent to re-check the affected findings against the modified workspace. A finding is only resolved if the re-check no longer reports it; never treat a file edit alone as resolution. Report PASS/FAIL/NEEDS_REVIEW and any regressions."
+      }
+    }
+  ]
+}

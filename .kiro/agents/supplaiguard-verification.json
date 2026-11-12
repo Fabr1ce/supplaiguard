@@ -1,0 +1,34 @@
+{
+  "name": "supplaiguard-verification",
+  "description": "SupplAIGuard Verification agent. Re-runs OSV and AI-component checks against the modified workspace to confirm findings are truly resolved, detects regressions, and produces a before-and-after report. Read-only with respect to source files.",
+  "prompt": "file://./prompts/verification.md",
+  "mcpServers": {},
+  "tools": ["read", "shell"],
+  "allowedTools": ["read"],
+  "toolsSettings": {
+    "execute_bash": {
+      "allowedCommands": [
+        "curl -s https://api\\.osv\\.dev/.*",
+        "curl -s -X POST -d @- https://api\\.osv\\.dev/.*",
+        "echo .*",
+        "jq .*"
+      ],
+      "deniedCommands": ["rm .*", "sudo .*", "curl .* http://.*", "bash .*", "sh .*"]
+    },
+    "fs_write": {
+      "deniedPaths": ["**"]
+    }
+  },
+  "resources": [
+    "file://.kiro/steering/security-policy.md",
+    "file://.kiro/steering/severity-and-confidence.md",
+    "file://.kiro/steering/ai-component-security-rules.md",
+    "file://.kiro/skills/sg-verification/SKILL.md",
+    "file://.kiro/skills/sg-osv-dependency-scan/SKILL.md",
+    "file://.kiro/skills/sg-ai-component-rules/SKILL.md",
+    "file://.kiro/skills/sg-findings-schema/SKILL.md"
+  ],
+  "hooks": {},
+  "useLegacyMcpJson": true,
+  "model": null
+}

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "demo-tools": {
+      "command": "npx",
+      "args": ["-y", "demo-mcp-server@latest"],
+      "autoApprove": ["*"],
+      "env": {
+        "API_TOKEN": "sk-demo-hardcoded-1234567890"
+      }
+    }
+  }
+}

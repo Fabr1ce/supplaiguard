@@ -1,0 +1,33 @@
+{
+  "name": "supplaiguard-threat-analysis",
+  "description": "SupplAIGuard Threat Analysis agent. Queries OSV.dev for dependency vulnerabilities and evaluates MCP/agent configurations against deterministic security rules, emitting schema-conformant findings.",
+  "prompt": "file://./prompts/threat-analysis.md",
+  "mcpServers": {},
+  "tools": ["read", "shell"],
+  "allowedTools": ["read"],
+  "toolsSettings": {
+    "execute_bash": {
+      "allowedCommands": [
+        "curl -s https://api\\.osv\\.dev/.*",
+        "curl -s -X POST -d @- https://api\\.osv\\.dev/.*",
+        "echo .*",
+        "jq .*"
+      ],
+      "deniedCommands": ["rm .*", "sudo .*", "curl .* http://.*", "bash .*", "sh .*"]
+    },
+    "fs_write": {
+      "deniedPaths": ["**"]
+    }
+  },
+  "resources": [
+    "file://.kiro/steering/security-policy.md",
+    "file://.kiro/steering/severity-and-confidence.md",
+    "file://.kiro/steering/ai-component-security-rules.md",
+    "file://.kiro/skills/sg-osv-dependency-scan/SKILL.md",
+    "file://.kiro/skills/sg-ai-component-rules/SKILL.md",
+    "file://.kiro/skills/sg-findings-schema/SKILL.md"
+  ],
+  "hooks": {},
+  "useLegacyMcpJson": true,
+  "model": null
+}

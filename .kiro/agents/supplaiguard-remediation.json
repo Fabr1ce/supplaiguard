@@ -1,0 +1,45 @@
+{
+  "name": "supplaiguard-remediation",
+  "description": "SupplAIGuard Remediation agent. Proposes and applies safe, approval-gated fixes (dependency bumps and config tightening). The only SupplAIGuard agent allowed to write; writes are scoped to manifests/config and deny secret/prod paths.",
+  "prompt": "file://./prompts/remediation.md",
+  "mcpServers": {},
+  "tools": ["read", "write", "shell"],
+  "allowedTools": ["read"],
+  "toolsSettings": {
+    "fs_write": {
+      "allowedPaths": [
+        "**/package.json",
+        "**/package-lock.json",
+        "**/mcp.json",
+        "**/.kiro/settings/mcp.json",
+        ".kiro/agents/**"
+      ],
+      "deniedPaths": [
+        "**/.env",
+        "**/.env.*",
+        "**/*secret*",
+        "**/secrets/**",
+        "**/*.pem",
+        "**/*.key"
+      ]
+    },
+    "execute_bash": {
+      "allowedCommands": [
+        "npm install .*",
+        "npm ci",
+        "curl -s https://api\\.osv\\.dev/.*",
+        "echo .*",
+        "jq .*"
+      ],
+      "deniedCommands": ["rm .*", "sudo .*", "git push .*", "git merge .*", "bash .*", "sh .*"]
+    }
+  },
+  "resources": [
+    "file://.kiro/steering/security-policy.md",
+    "file://.kiro/skills/sg-remediation/SKILL.md",
+    "file://.kiro/skills/sg-findings-schema/SKILL.md"
+  ],
+  "hooks": {},
+  "useLegacyMcpJson": true,
+  "model": null
+}

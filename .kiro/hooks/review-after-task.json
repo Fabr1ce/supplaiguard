@@ -1,0 +1,22 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "supplaiguard-review-after-task",
+      "description": "After each task completes (Stop), run the SupplAIGuard reviewer agent on a different model to independently cross-check the work. Fail-safe: never blocks or discards the completed task.",
+      "trigger": "Stop",
+      "timeout": 180,
+      "action": {
+        "type": "command",
+        "command": "kiro-cli chat --agent supplaiguard-reviewer --no-interactive 'Review the changes from the task just completed against the SupplAIGuard spec and security policy. Use git diff to see what changed. Output your structured review.' 2>&1 || echo 'WARN: SupplAIGuard reviewer did not run (model unavailable or launch error); task work is preserved.'"
+      },
+      "confirm": {
+        "question": "Run the SupplAIGuard review agent (different model) on this task?",
+        "options": [
+          { "id": "review", "label": "Yes, review", "run": true },
+          { "id": "skip", "label": "Skip this time", "run": false }
+        ]
+      }
+    }
+  ]
+}

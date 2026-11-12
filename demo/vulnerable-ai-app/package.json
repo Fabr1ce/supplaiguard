@@ -1,0 +1,9 @@
+{
+  "name": "vulnerable-ai-app",
+  "version": "1.0.0",
+  "description": "SupplAIGuard demo app with a seeded vulnerable dependency and insecure AI components.",
+  "private": true,
+  "dependencies": {
+    "lodash": "4.17.4"
+  }
+}

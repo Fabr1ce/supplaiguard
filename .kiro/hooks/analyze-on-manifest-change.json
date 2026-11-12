@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "supplaiguard-analyze-on-manifest-change",
+      "description": "After a dependency manifest or AI-component config is saved, prompt a SupplAIGuard analysis.",
+      "trigger": "PostFileSave",
+      "matcher": "(package\\.json|package-lock\\.json|mcp\\.json|\\.kiro/agents/.*\\.json)$",
+      "action": {
+        "type": "agent",
+        "prompt": "A dependency manifest or AI-component config just changed. Run a SupplAIGuard analysis: delegate to supplaiguard-discovery then supplaiguard-threat-analysis (via the supplaiguard-coordinator), and report any new findings per the sg-findings-schema. Do not remediate without approval."
+      }
+    }
+  ]
+}

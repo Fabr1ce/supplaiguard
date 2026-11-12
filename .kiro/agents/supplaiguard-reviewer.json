@@ -1,0 +1,27 @@
+{
+  "name": "supplaiguard-reviewer",
+  "description": "SupplAIGuard independent post-task reviewer. Runs read-only on a different model to cross-check completed work against the spec and the security policy. Report-only; never modifies files.",
+  "prompt": "file://./prompts/reviewer.md",
+  "mcpServers": {},
+  "tools": ["read", "shell"],
+  "allowedTools": ["read"],
+  "toolsSettings": {
+    "execute_bash": {
+      "allowedCommands": ["git diff.*", "git status.*", "git log.*", "git show.*"],
+      "deniedCommands": ["git push .*", "git merge .*", "git commit .*", "rm .*", "sudo .*"]
+    },
+    "fs_write": {
+      "deniedPaths": ["**"]
+    }
+  },
+  "resources": [
+    "file://.kiro/specs/supplaiguard/requirements.md",
+    "file://.kiro/specs/supplaiguard/design.md",
+    "file://.kiro/specs/supplaiguard/tasks.md",
+    "file://.kiro/steering/security-policy.md",
+    "file://.kiro/skills/sg-findings-schema/SKILL.md"
+  ],
+  "hooks": {},
+  "useLegacyMcpJson": true,
+  "model": "claude-sonnet-4.6"
+}
