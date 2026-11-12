@@ -4,8 +4,8 @@
 *Prevent locally. Detect continuously. Remediate intelligently. Verify automatically.*
 
 SupplAIGuard protects the software supply chain of AI applications. Beyond
-traditional dependency scanners, it analyzes AI-specific components — MCP server
-configurations, agent definitions, and agent tool permissions — that
+traditional dependency scanners, it analyzes AI-specific components such as MCP server
+configurations, agent definitions, and agent tool permissions that
 deterministic tools miss.
 
 ## Phase 1 (this MVP) — Kiro-native
@@ -21,7 +21,7 @@ Phase 1 is built **entirely from Kiro primitives** — no application code:
 
 Agents do their work with built-in tools (`read`, `write`, `shell`). The only
 external call is to the public **OSV.dev** API for vulnerability intelligence.
-No repository source leaves the machine — only package name+version coordinates.
+No repository source leaves the machine, only package name+version coordinates.
 
 > Runtime note: authored for and validated against **kiro-cli 1.21.0**. Agent
 > configs use the 2.x schema (`allowedTools` + `toolsSettings`); hooks use the
