@@ -1,0 +1,4 @@
+strands-agents==1.64.0
+mcp>=1.0
+# SupplAIGuard demo seed: jinja2 3.1.2 has known OSV advisories (fixed in later 3.1.x).
+jinja2==3.1.2

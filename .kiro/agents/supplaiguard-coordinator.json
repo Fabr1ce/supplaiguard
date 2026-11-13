@@ -3,8 +3,14 @@
   "description": "SupplAIGuard orchestrator. Runs the local security lifecycle by delegating to the discovery, threat-analysis, remediation, and verification sub-agents in order, then produces a consolidated report. Use to run a full SupplAIGuard scan.",
   "prompt": "file://./prompts/coordinator.md",
   "mcpServers": {},
-  "tools": ["read", "delegate"],
-  "allowedTools": ["read", "delegate"],
+  "tools": [
+    "delegate",
+    "read"
+  ],
+  "allowedTools": [
+    "read",
+    "delegate"
+  ],
   "toolsSettings": {
     "subagent": {
       "availableAgents": [
@@ -20,14 +26,49 @@
       ]
     },
     "fs_write": {
-      "deniedPaths": ["**"]
+      "deniedPaths": [
+        "**"
+      ]
     }
   },
   "resources": [
-    "file://.kiro/steering/security-policy.md",
-    "file://.kiro/skills/sg-findings-schema/SKILL.md"
+    "file://~/.kiro/supplaiguard/steering/security-policy.md",
+    "file://~/.kiro/supplaiguard/skills/sg-findings-schema/SKILL.md"
   ],
-  "hooks": {},
+  "hooks": [],
   "useLegacyMcpJson": true,
-  "model": null
+  "model": null,
+  "permissions": {
+    "rules": [
+      {
+        "capability": "fs_write",
+        "match": [
+          "**"
+        ],
+        "effect": "deny"
+      },
+      {
+        "capability": "subagent",
+        "match": [
+          "supplaiguard-discovery",
+          "supplaiguard-threat-analysis",
+          "supplaiguard-verification"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "fs_read",
+        "effect": "allow"
+      },
+      {
+        "capability": "skill",
+        "effect": "allow"
+      }
+    ]
+  },
+  "kiroUpgrade": {
+    "revision": 2,
+    "fingerprint": "sha256:71f36ceca81e1b8a653767bc9d524659b295531035c4db266b29c01d4360eab7",
+    "source": "sha256:fbef847336e8b49d519c1627ff40f5d7a32b54f29c7993d374291564854ad6df"
+  }
 }

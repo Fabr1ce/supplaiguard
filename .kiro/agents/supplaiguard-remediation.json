@@ -3,8 +3,14 @@
   "description": "SupplAIGuard Remediation agent. Proposes and applies safe, approval-gated fixes (dependency bumps and config tightening). The only SupplAIGuard agent allowed to write; writes are scoped to manifests/config and deny secret/prod paths.",
   "prompt": "file://./prompts/remediation.md",
   "mcpServers": {},
-  "tools": ["read", "write", "shell"],
-  "allowedTools": ["read"],
+  "tools": [
+    "read",
+    "shell",
+    "write"
+  ],
+  "allowedTools": [
+    "read"
+  ],
   "toolsSettings": {
     "fs_write": {
       "allowedPaths": [
@@ -31,15 +37,85 @@
         "echo .*",
         "jq .*"
       ],
-      "deniedCommands": ["rm .*", "sudo .*", "git push .*", "git merge .*", "bash .*", "sh .*"]
+      "deniedCommands": [
+        "rm .*",
+        "sudo .*",
+        "git push .*",
+        "git merge .*",
+        "bash .*",
+        "sh .*"
+      ]
     }
   },
   "resources": [
-    "file://.kiro/steering/security-policy.md",
-    "file://.kiro/skills/sg-remediation/SKILL.md",
-    "file://.kiro/skills/sg-findings-schema/SKILL.md"
+    "file://~/.kiro/supplaiguard/steering/security-policy.md",
+    "file://~/.kiro/supplaiguard/skills/sg-remediation/SKILL.md",
+    "file://~/.kiro/supplaiguard/skills/sg-findings-schema/SKILL.md"
   ],
-  "hooks": {},
+  "hooks": [],
   "useLegacyMcpJson": true,
-  "model": null
+  "model": null,
+  "permissions": {
+    "rules": [
+      {
+        "capability": "shell",
+        "match": [
+          "npm install *",
+          "npm ci",
+          "curl -s https://api.osv.dev/*",
+          "echo *",
+          "jq *"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "shell",
+        "match": [
+          "rm *",
+          "sudo *",
+          "git push *",
+          "git merge *",
+          "bash *",
+          "sh *"
+        ],
+        "effect": "deny"
+      },
+      {
+        "capability": "fs_write",
+        "match": [
+          "**/package.json",
+          "**/package-lock.json",
+          "**/mcp.json",
+          "**/.kiro/settings/mcp.json",
+          ".kiro/agents/**"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "fs_write",
+        "match": [
+          "**/.env",
+          "**/.env.*",
+          "**/*secret*",
+          "**/secrets/**",
+          "**/*.pem",
+          "**/*.key"
+        ],
+        "effect": "deny"
+      },
+      {
+        "capability": "fs_read",
+        "effect": "allow"
+      },
+      {
+        "capability": "skill",
+        "effect": "allow"
+      }
+    ]
+  },
+  "kiroUpgrade": {
+    "revision": 2,
+    "fingerprint": "sha256:42ae3fd83d0da15c943dc67a6ed182b044be17744580eb58c2d05efb8dea02ed",
+    "source": "sha256:0b99d0464ca6f696c13102ef94267b83539b320846bffd6b39e042e3bad526de"
+  }
 }

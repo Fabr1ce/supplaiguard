@@ -1,0 +1,23 @@
+{
+  "name": "crypt-keeper-mcp",
+  "version": "1.0.0",
+  "description": "Halloween MCP server: a crypt of scary stories, curses and haunted places. SupplAIGuard demo with a seeded vulnerable dependency (minimist@1.2.0).",
+  "private": true,
+  "type": "module",
+  "bin": { "crypt-keeper-mcp": "dist/index.js" },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "node --test dist/"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "minimist": "1.2.0",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@types/minimist": "1.2.5",
+    "@types/node": "20.19.0",
+    "typescript": "5.9.3"
+  }
+}

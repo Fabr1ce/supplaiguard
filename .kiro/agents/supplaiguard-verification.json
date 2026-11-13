@@ -3,8 +3,13 @@
   "description": "SupplAIGuard Verification agent. Re-runs OSV and AI-component checks against the modified workspace to confirm findings are truly resolved, detects regressions, and produces a before-and-after report. Read-only with respect to source files.",
   "prompt": "file://./prompts/verification.md",
   "mcpServers": {},
-  "tools": ["read", "shell"],
-  "allowedTools": ["read"],
+  "tools": [
+    "read",
+    "shell"
+  ],
+  "allowedTools": [
+    "read"
+  ],
   "toolsSettings": {
     "execute_bash": {
       "allowedCommands": [
@@ -13,22 +18,76 @@
         "echo .*",
         "jq .*"
       ],
-      "deniedCommands": ["rm .*", "sudo .*", "curl .* http://.*", "bash .*", "sh .*"]
+      "deniedCommands": [
+        "rm .*",
+        "sudo .*",
+        "curl .* http://.*",
+        "bash .*",
+        "sh .*"
+      ]
     },
     "fs_write": {
-      "deniedPaths": ["**"]
+      "deniedPaths": [
+        "**"
+      ]
     }
   },
   "resources": [
-    "file://.kiro/steering/security-policy.md",
-    "file://.kiro/steering/severity-and-confidence.md",
-    "file://.kiro/steering/ai-component-security-rules.md",
-    "file://.kiro/skills/sg-verification/SKILL.md",
-    "file://.kiro/skills/sg-osv-dependency-scan/SKILL.md",
-    "file://.kiro/skills/sg-ai-component-rules/SKILL.md",
-    "file://.kiro/skills/sg-findings-schema/SKILL.md"
+    "file://~/.kiro/supplaiguard/steering/security-policy.md",
+    "file://~/.kiro/supplaiguard/steering/severity-and-confidence.md",
+    "file://~/.kiro/supplaiguard/steering/ai-component-security-rules.md",
+    "file://~/.kiro/supplaiguard/skills/sg-verification/SKILL.md",
+    "file://~/.kiro/supplaiguard/skills/sg-osv-dependency-scan/SKILL.md",
+    "file://~/.kiro/supplaiguard/skills/sg-ai-component-rules/SKILL.md",
+    "file://~/.kiro/supplaiguard/skills/sg-findings-schema/SKILL.md"
   ],
-  "hooks": {},
+  "hooks": [],
   "useLegacyMcpJson": true,
-  "model": null
+  "model": null,
+  "permissions": {
+    "rules": [
+      {
+        "capability": "shell",
+        "match": [
+          "python3 ~/.kiro/supplaiguard/scanner/sg_scan.py *",
+          "curl -s https://api.osv.dev/*",
+          "curl -s -X POST -d @- https://api.osv.dev/*",
+          "echo *",
+          "jq *"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "shell",
+        "match": [
+          "rm *",
+          "sudo *",
+          "curl * http://*",
+          "bash *",
+          "sh *"
+        ],
+        "effect": "deny"
+      },
+      {
+        "capability": "fs_write",
+        "match": [
+          "**"
+        ],
+        "effect": "deny"
+      },
+      {
+        "capability": "fs_read",
+        "effect": "allow"
+      },
+      {
+        "capability": "skill",
+        "effect": "allow"
+      }
+    ]
+  },
+  "kiroUpgrade": {
+    "revision": 2,
+    "fingerprint": "sha256:5a6af50dbd0c658f99c4e27ba42fd97cfc84d2056f5ed86831eb9aa469214d7d",
+    "source": "sha256:9e1adf4f952f54c0f5fa414321af721c966393531c4ebd5b97e5c1831f4b34d5"
+  }
 }

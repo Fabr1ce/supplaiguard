@@ -3,25 +3,88 @@
   "description": "SupplAIGuard independent post-task reviewer. Runs read-only on a different model to cross-check completed work against the spec and the security policy. Report-only; never modifies files.",
   "prompt": "file://./prompts/reviewer.md",
   "mcpServers": {},
-  "tools": ["read", "shell"],
-  "allowedTools": ["read"],
+  "tools": [
+    "read",
+    "shell"
+  ],
+  "allowedTools": [
+    "read"
+  ],
   "toolsSettings": {
     "execute_bash": {
-      "allowedCommands": ["git diff.*", "git status.*", "git log.*", "git show.*"],
-      "deniedCommands": ["git push .*", "git merge .*", "git commit .*", "rm .*", "sudo .*"]
+      "allowedCommands": [
+        "git diff.*",
+        "git status.*",
+        "git log.*",
+        "git show.*"
+      ],
+      "deniedCommands": [
+        "git push .*",
+        "git merge .*",
+        "git commit .*",
+        "rm .*",
+        "sudo .*"
+      ]
     },
     "fs_write": {
-      "deniedPaths": ["**"]
+      "deniedPaths": [
+        "**"
+      ]
     }
   },
   "resources": [
     "file://.kiro/specs/supplaiguard/requirements.md",
     "file://.kiro/specs/supplaiguard/design.md",
     "file://.kiro/specs/supplaiguard/tasks.md",
-    "file://.kiro/steering/security-policy.md",
-    "file://.kiro/skills/sg-findings-schema/SKILL.md"
+    "file://~/.kiro/supplaiguard/steering/security-policy.md",
+    "file://~/.kiro/supplaiguard/skills/sg-findings-schema/SKILL.md"
   ],
-  "hooks": {},
+  "hooks": [],
   "useLegacyMcpJson": true,
-  "model": "claude-sonnet-4.6"
+  "model": "claude-sonnet-4.6",
+  "permissions": {
+    "rules": [
+      {
+        "capability": "shell",
+        "match": [
+          "git diff*",
+          "git status*",
+          "git log*",
+          "git show*"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "shell",
+        "match": [
+          "git push *",
+          "git merge *",
+          "git commit *",
+          "rm *",
+          "sudo *"
+        ],
+        "effect": "deny"
+      },
+      {
+        "capability": "fs_write",
+        "match": [
+          "**"
+        ],
+        "effect": "deny"
+      },
+      {
+        "capability": "fs_read",
+        "effect": "allow"
+      },
+      {
+        "capability": "skill",
+        "effect": "allow"
+      }
+    ]
+  },
+  "kiroUpgrade": {
+    "revision": 2,
+    "fingerprint": "sha256:1732f92fa892593b85b14089807369f30f11ab48fc77afb0d80830d44f686fe2",
+    "source": "sha256:809ea76daf1e9f1c2bceffed671da5af0fa1a64948af71a8cf428b66de5b2d19"
+  }
 }

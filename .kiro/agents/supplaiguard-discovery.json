@@ -3,19 +3,49 @@
   "description": "SupplAIGuard Discovery agent. Read-only inventory of npm dependencies, MCP configurations, and agent definitions in the repository.",
   "prompt": "file://./prompts/discovery.md",
   "mcpServers": {},
-  "tools": ["read"],
-  "allowedTools": ["read"],
+  "tools": [
+    "read"
+  ],
+  "allowedTools": [
+    "read"
+  ],
   "toolsSettings": {
     "fs_write": {
-      "deniedPaths": ["**"]
+      "deniedPaths": [
+        "**"
+      ]
     }
   },
   "resources": [
-    "file://.kiro/steering/security-policy.md",
-    "file://.kiro/skills/sg-npm-inventory/SKILL.md",
-    "file://.kiro/skills/sg-findings-schema/SKILL.md"
+    "file://~/.kiro/supplaiguard/steering/security-policy.md",
+    "file://~/.kiro/supplaiguard/skills/sg-npm-inventory/SKILL.md",
+    "file://~/.kiro/supplaiguard/skills/sg-findings-schema/SKILL.md"
   ],
-  "hooks": {},
+  "hooks": [],
   "useLegacyMcpJson": true,
-  "model": null
+  "model": null,
+  "permissions": {
+    "rules": [
+      {
+        "capability": "fs_write",
+        "match": [
+          "**"
+        ],
+        "effect": "deny"
+      },
+      {
+        "capability": "fs_read",
+        "effect": "allow"
+      },
+      {
+        "capability": "skill",
+        "effect": "allow"
+      }
+    ]
+  },
+  "kiroUpgrade": {
+    "revision": 2,
+    "fingerprint": "sha256:5a3bc280143316e99a05bb1ff66ffad809c9a6daa09c4a5f315443a45933b02f",
+    "source": "sha256:4597bb181e6ec0288a80a91e2a05454db040b7d273f57a021d8aad9659bc4547"
+  }
 }
