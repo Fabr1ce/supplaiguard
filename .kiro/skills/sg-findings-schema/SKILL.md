@@ -17,6 +17,7 @@ malformed findings object were valid.
   "scan_id": "string — unique id, e.g. scan-<timestamp>",
   "environment": "local | ci",
   "generated_at": "ISO-8601 timestamp",
+  "scanner_version": "string — optional, set by sg_scan.py",
   "findings": [ /* Finding objects */ ],
   "errors": [ /* optional ScanError objects */ ]
 }

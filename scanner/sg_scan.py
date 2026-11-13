@@ -7,19 +7,30 @@ emits the findings schema from the sg-findings-schema skill. Exact checks
 results are reproducible; the LLM agents are reserved for triage, semantic SKL
 review, and remediation.
 
-Usage: sg_scan.py [REPO] [--offline] [--pretty]
-Exit:  0 clean | 1 findings | 2 scan errors (never a false all-clear)
+Usage: sg_scan.py [REPO] [--offline] [--pretty] [--format json|md|html]
+                  [--fail-on low|medium|high|critical] [--environment local|ci]
+                  [--out-dir DIR]
+Exit:  0 clean | 1 findings at/above --fail-on | 2 scan errors (never a false all-clear)
 """
 from __future__ import annotations
 
 import argparse
+import html
 import json
+import os
 import re
 import sys
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+VERSION = "0.2.0"
+SEV_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+FINDING_TYPES = {"vulnerable_dependency", "malicious_package_indicator", "insecure_mcp_configuration",
+                 "excessive_tool_permissions", "suspicious_agent_skill", "insecure_integration_configuration"}
+CONFIDENCE = {"high", "medium", "low"}
+STATUSES = {"open", "remediated", "resolved", "needs_review"}
+NO_RULE_ID = {"vulnerable_dependency", "malicious_package_indicator"}
 OSV_BATCH = "https://api.osv.dev/v1/querybatch"
 OSV_VULN = "https://api.osv.dev/v1/vulns/"
 SKIP_DIRS = {"node_modules", ".git", ".venv", "venv", "__pycache__"}
@@ -194,17 +205,22 @@ def semver(v: str):
     return tuple(int(x) for x in re.findall(r"\d+", v.split("-")[0])[:3])
 
 
-def lock_packages(scan: Scan, p: Path) -> dict[str, str]:
+def lock_packages(scan: Scan, p: Path) -> set[tuple[str, str]]:
+    """Every (name, version) installed according to package-lock.json.
+
+    A lockfile can hold several versions of one package (nested node_modules); each one is
+    a separate install that can be vulnerable, so none may be collapsed by name.
+    """
     data = load_json(scan, p, "discovery") or {}
-    out: dict[str, str] = {}
+    out: set[tuple[str, str]] = set()
     for path, meta in (data.get("packages") or {}).items():
         if path and meta.get("version") and "node_modules/" in path:
-            out[path.rsplit("node_modules/", 1)[1]] = meta["version"]
+            out.add((path.rsplit("node_modules/", 1)[1], meta["version"]))
 
     def v1(deps):
         for n, m in (deps or {}).items():
             if m.get("version"):
-                out[n] = m["version"]
+                out.add((n, m["version"]))
             v1(m.get("dependencies"))
     v1(data.get("dependencies"))
     return out
@@ -229,13 +245,13 @@ def requirements_packages(p: Path) -> dict[str, str]:
 
 def scan_deps(scan: Scan, lock: Path, offline: bool):
     eco = "PyPI" if lock.suffix == ".txt" else "npm"
-    pkgs = requirements_packages(lock) if eco == "PyPI" else lock_packages(scan, lock)
+    pkgs = set(requirements_packages(lock).items()) if eco == "PyPI" else lock_packages(scan, lock)
     if not pkgs or offline:
         if offline and pkgs:
             scan.error("osv.dev", "threat_analysis", "offline mode: dependency CVEs NOT checked")
         return
     src = rel(scan, lock)
-    items = sorted(pkgs.items())
+    items = sorted(pkgs)
     try:
         vulns: dict[tuple[str, str], list[str]] = {}
         for i in range(0, len(items), 500):
@@ -270,16 +286,11 @@ def scan_deps(scan: Scan, lock: Path, offline: bool):
         scan.error("osv.dev", "threat_analysis", f"OSV lookup failed: {e}")
 
 
-# ---------------------------------------------------------------- main
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("repo", nargs="?", default=".")
-    ap.add_argument("--offline", action="store_true", help="skip OSV lookups (reported as an error)")
-    ap.add_argument("--pretty", action="store_true")
-    a = ap.parse_args()
-    repo = Path(a.repo).resolve()
+# ---------------------------------------------------------------- scan / validate / exit code
+def run_scan(repo: Path, offline: bool = False, environment: str | None = None) -> dict:
+    """Run every check and return a scan object per the sg-findings-schema skill."""
+    repo = Path(repo).resolve()
     scan = Scan(repo)
-
     for p in walk(repo, {"mcp.json"}):
         scan_mcp(scan, p)
     for p in walk(repo, suffix=".json"):
@@ -288,16 +299,187 @@ def main() -> int:
     for p in walk(repo, {"SKILL.md"}):
         scan_skl(scan, p.parent.name, rel(scan, p), p.read_text(errors="ignore"))
     for p in walk(repo, {"package-lock.json"}):
-        scan_deps(scan, p, a.offline)
+        scan_deps(scan, p, offline)
     for p in walk(repo):
         if re.fullmatch(r"requirements[\w.\-]*\.txt", p.name):
-            scan_deps(scan, p, a.offline)
+            scan_deps(scan, p, offline)
+    now = datetime.now(timezone.utc)
+    env = environment or ("ci" if os.environ.get("GITHUB_ACTIONS") == "true" else "local")
+    return {"repository": repo.name, "scan_id": now.strftime("scan-%Y%m%d-%H%M%S"), "environment": env,
+            "generated_at": now.isoformat(timespec="seconds"), "scanner_version": VERSION,
+            "findings": scan.findings, "errors": scan.errors}
 
-    out = {"repository": repo.name, "scan_id": datetime.now(timezone.utc).strftime("scan-%Y%m%d-%H%M%S"),
-           "environment": "local", "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-           "findings": scan.findings, "errors": scan.errors}
-    print(json.dumps(out, indent=2 if a.pretty else None))
-    return 2 if scan.errors else (1 if scan.findings else 0)
+
+def exit_code(out: dict, fail_on: str = "low") -> int:
+    """2 if anything went wrong (never a false all-clear), 1 if a finding reaches the threshold, else 0."""
+    if out.get("errors"):
+        return 2
+    limit = SEV_RANK[fail_on]
+    return 1 if any(SEV_RANK.get(f.get("severity"), 0) >= limit for f in out.get("findings", [])) else 0
+
+
+def validate_scan(out: dict) -> list[str]:
+    """Check a scan object against the sg-findings-schema contract. Returns a list of problems."""
+    bad: list[str] = []
+    for k in ("repository", "scan_id", "environment", "generated_at", "findings"):
+        if k not in out:
+            bad.append(f"missing top-level field: {k}")
+    if out.get("environment") not in ("local", "ci"):
+        bad.append(f"environment must be local|ci, got {out.get('environment')!r}")
+    ids = set()
+    for f in out.get("findings", []):
+        fid = f.get("id", "?")
+        if fid in ids:
+            bad.append(f"duplicate id {fid}")
+        ids.add(fid)
+        for k in ("id", "type", "component", "severity", "confidence", "source", "description",
+                  "remediation_available", "status"):
+            if k not in f:
+                bad.append(f"{fid}: missing {k}")
+        if f.get("type") not in FINDING_TYPES:
+            bad.append(f"{fid}: bad type {f.get('type')!r}")
+        if f.get("severity") not in SEV_RANK:
+            bad.append(f"{fid}: bad severity {f.get('severity')!r}")
+        if f.get("confidence") not in CONFIDENCE:
+            bad.append(f"{fid}: bad confidence {f.get('confidence')!r}")
+        if f.get("status") not in STATUSES:
+            bad.append(f"{fid}: bad status {f.get('status')!r}")
+        if not isinstance(f.get("remediation_available"), bool):
+            bad.append(f"{fid}: remediation_available must be bool")
+        if "evidence" not in f or f.get("evidence") in (None, "", []):
+            bad.append(f"{fid}: evidence is required")
+        if f.get("type") == "vulnerable_dependency":
+            for k in ("current_version", "recommended_version"):
+                if k not in f:
+                    bad.append(f"{fid}: dependency finding missing {k}")
+        if f.get("type") not in NO_RULE_ID and not f.get("rule_id"):
+            bad.append(f"{fid}: AI-component finding missing rule_id")
+    return bad
+
+
+# ---------------------------------------------------------------- reports (all text is escaped: evidence is untrusted)
+def _text(v, limit: int = 200) -> str:
+    if isinstance(v, (list, tuple)):
+        v = ", ".join(str(x) for x in v)
+    v = re.sub(r"[\x00-\x1f\x7f]+", " ", str(v if v is not None else ""))
+    return v[:limit] + ("…" if len(v) > limit else "")
+
+
+def _md(v, limit: int = 200) -> str:
+    return html.escape(_text(v, limit), quote=True).replace("|", "&#124;").replace("`", "&#96;")
+
+
+def _counts(out: dict) -> dict:
+    c = {s: 0 for s in ("critical", "high", "medium", "low")}
+    for f in out.get("findings", []):
+        if f.get("severity") in c:
+            c[f["severity"]] += 1
+    return c
+
+
+def _status(out: dict) -> tuple[str, str]:
+    if out.get("errors"):
+        return "INCOMPLETE", "The scan did not finish cleanly, so this is NOT a clean result."
+    if out.get("findings"):
+        return "FINDINGS", f"{len(out['findings'])} finding(s) need attention."
+    return "CLEAN", "No findings."
+
+
+def _sorted(out: dict) -> list[dict]:
+    return sorted(out.get("findings", []), key=lambda f: (-SEV_RANK.get(f.get("severity"), 0), f.get("id", "")))
+
+
+def _detail(f: dict) -> str:
+    if f.get("type") == "vulnerable_dependency":
+        return f"{f.get('current_version', '?')} → {f.get('recommended_version', '?')}"
+    return f.get("rule_id", "")
+
+
+def render_md(out: dict) -> str:
+    label, msg = _status(out)
+    c = _counts(out)
+    L = [f"## SupplAIGuard scan: {label}", "",
+         f"{_md(msg)}", "",
+         f"`{_md(out.get('repository'))}` · {_md(out.get('environment'))} · {_md(out.get('scan_id'))}", "",
+         "| Critical | High | Medium | Low |", "|---|---|---|---|",
+         f"| {c['critical']} | {c['high']} | {c['medium']} | {c['low']} |", ""]
+    if out.get("errors"):
+        L += ["### Scan errors", ""] + [f"- {_md(e.get('source'))} ({_md(e.get('stage'))}): {_md(e.get('message'))}"
+                                       for e in out["errors"]] + [""]
+    if out.get("findings"):
+        L += ["### Findings", "", "| ID | Severity | Type | Component | Detail | Source |", "|---|---|---|---|---|---|"]
+        for f in _sorted(out):
+            L.append(f"| {_md(f.get('id'))} | {_md(f.get('severity'))} | {_md(f.get('type'))} | "
+                     f"{_md(f.get('component'), 60)} | {_md(_detail(f), 60)} | {_md(f.get('source'), 80)} |")
+        L.append("")
+    return "\n".join(L)
+
+
+_CSS = """body{margin:0;background:#120f1a;color:#e8e4f0;font:16px/1.5 system-ui,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:32px 20px}h1{margin:0 0 4px;color:#ff9f43}
+.sub{color:#9a93ad;margin-bottom:24px}.banner{padding:14px 18px;border-radius:10px;font-weight:600;margin-bottom:24px}
+.CLEAN{background:#12351f;color:#7ee2a0}.FINDINGS{background:#3a1f12;color:#ffb27a}.INCOMPLETE{background:#3a1224;color:#ff7aa8}
+.cards{display:flex;gap:12px;margin-bottom:28px;flex-wrap:wrap}.card{flex:1;min-width:110px;background:#1c1729;border-radius:10px;padding:12px 16px}
+.card b{display:block;font-size:28px}.critical{color:#ff5c7a}.high{color:#ff9f43}.medium{color:#ffd166}.low{color:#8ecae6}
+table{width:100%;border-collapse:collapse;background:#1c1729;border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #2a2440;vertical-align:top}th{color:#9a93ad;font-weight:600}
+.pill{padding:2px 8px;border-radius:999px;background:#2a2440;font-size:13px}.err li{color:#ff7aa8}footer{margin-top:28px;color:#6f6888;font-size:13px}"""
+
+
+def render_html(out: dict) -> str:
+    e = lambda v, n=200: html.escape(_text(v, n), quote=True)  # noqa: E731
+    label, msg = _status(out)
+    c = _counts(out)
+    rows = "".join(
+        f"<tr><td>{e(f.get('id'))}</td><td class=\"{e(f.get('severity'))}\">{e(f.get('severity'))}</td>"
+        f"<td>{e(f.get('type'))}</td><td>{e(f.get('component'), 80)}</td><td>{e(_detail(f), 80)}</td>"
+        f"<td>{e(f.get('source'), 100)}</td><td>{e(f.get('evidence'), 160)}</td></tr>" for f in _sorted(out))
+    errs = "".join(f"<li>{e(x.get('source'))} ({e(x.get('stage'))}): {e(x.get('message'))}</li>" for x in out.get("errors", []))
+    err_html = f'<h2>Scan errors</h2><ul class="err">{errs}</ul>' if errs else ""
+    cards = "".join(f"<div class=\"card\"><span class=\"{s}\">{s.title()}</span><b>{c[s]}</b></div>" for s in c)
+    table = ("<table><thead><tr><th>ID</th><th>Severity</th><th>Type</th><th>Component</th><th>Detail</th>"
+             f"<th>Source</th><th>Evidence</th></tr></thead><tbody>{rows}</tbody></table>") if rows else ""
+    return (f"<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+            f"<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'\">"
+            f"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>SupplAIGuard report</title>"
+            f"<style>{_CSS}</style></head><body><main><h1>SupplAIGuard</h1>"
+            f"<div class=\"sub\">{e(out.get('repository'))} · <span class=\"pill\">{e(out.get('environment'))}</span> · "
+            f"{e(out.get('scan_id'))} · scanner {e(out.get('scanner_version', ''))}</div>"
+            f"<div class=\"banner {label}\">{label}: {e(msg)}</div><div class=\"cards\">{cards}</div>"
+            f"{err_html}{table}"
+            f"<footer>Secure locally. Verify continuously. Ship confidently.</footer></main></body></html>")
+
+
+# ---------------------------------------------------------------- main
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("repo", nargs="?", default=".")
+    ap.add_argument("--offline", action="store_true", help="skip OSV lookups (reported as an error)")
+    ap.add_argument("--pretty", action="store_true", help="indent JSON output")
+    ap.add_argument("--format", choices=("json", "md", "html"), default="json", help="what to print to stdout")
+    ap.add_argument("--fail-on", choices=tuple(SEV_RANK), default="low",
+                    help="lowest severity that makes the exit code 1 (default: low = any finding)")
+    ap.add_argument("--environment", choices=("local", "ci"), help="default: ci when GITHUB_ACTIONS=true")
+    ap.add_argument("--out-dir", help="also write findings.json, summary.md and report.html here")
+    a = ap.parse_args()
+
+    out = run_scan(Path(a.repo), a.offline, a.environment)
+    problems = validate_scan(out)
+    if problems:  # a malformed scan object is a scanner bug: surface it, never pass it on as valid
+        out["errors"].append({"source": "scanner", "stage": "validation", "message": "; ".join(problems[:5])})
+    if a.out_dir:
+        d = Path(a.out_dir)
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "findings.json").write_text(json.dumps(out, indent=2))
+        (d / "summary.md").write_text(render_md(out))
+        (d / "report.html").write_text(render_html(out))
+    if a.format == "md":
+        print(render_md(out))
+    elif a.format == "html":
+        print(render_html(out))
+    else:
+        print(json.dumps(out, indent=2 if a.pretty else None))
+    return exit_code(out, a.fail_on)
 
 
 if __name__ == "__main__":

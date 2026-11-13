@@ -51,6 +51,10 @@ for d in "$SRC"/.kiro/skills/sg-*/; do
   run cp -f "$d"SKILL.md "$SG_DST/skills/$(basename "$d")/SKILL.md"
 done
 
+# Deterministic scanner the threat-analysis and verification agents run first
+run mkdir -p "$SG_DST/scanner"
+run cp -f "$SRC"/scanner/sg_scan.py "$SG_DST/scanner/sg_scan.py"
+
 # Agent prompts (referenced relatively as ./prompts/*.md)
 run cp -f "$SRC"/.kiro/agents/prompts/*.md "$AGENTS_DST/prompts/"
 

@@ -48,6 +48,7 @@
       {
         "capability": "shell",
         "match": [
+          "python3 ~/.kiro/supplaiguard/scanner/sg_scan.py *",
           "curl -s https://api.osv.dev/*",
           "curl -s -X POST -d @- https://api.osv.dev/*",
           "echo *",

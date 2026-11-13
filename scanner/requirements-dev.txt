@@ -1,0 +1,4 @@
+# Test-only dependencies for scanner/tests (the scanner itself is standard-library only).
+# Run: uv venv --python 3.15 scanner/.venv && uv pip install --python scanner/.venv/bin/python -r scanner/requirements-dev.txt
+pytest==9.2.0
+hypothesis==6.170.15

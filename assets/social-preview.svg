@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="t d"><title id="t">SupplAIGuard</title><desc id="d">A stitched-together green and purple ghost-hem shield with a Frankenstein flat head, neck bolts, one human eye and one eye made of agent nodes.</desc><rect width="1280" height="640" rx="53" fill="#120f1a"/><g transform="translate(110,150) scale(1.9)"><g id="mark">
+  <defs>
+    <clipPath id="shield"><path d="M44,28 H156 A16,16 0 0 1 172,44 V186 A18,18 0 0 1 136,186 A18,18 0 0 1 100,186 A18,18 0 0 1 64,186 A18,18 0 0 1 28,186 V44 A16,16 0 0 1 44,28 Z"/></clipPath>
+    <linearGradient id="gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd36b"/><stop offset="1" stop-color="#4f9f56"/></linearGradient>
+    <linearGradient id="gr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a265ff"/><stop offset="1" stop-color="#6a2fd6"/></linearGradient>
+  </defs>
+  <!-- neck bolts -->
+  <g fill="#c9c7d6" stroke="#1a1326" stroke-width="3" stroke-linejoin="round">
+    <rect x="10" y="103" width="20" height="14" rx="3"/><rect x="5" y="99" width="8" height="22" rx="3"/>
+    <rect x="170" y="103" width="20" height="14" rx="3"/><rect x="187" y="99" width="8" height="22" rx="3"/>
+  </g>
+  <!-- two stitched halves, clipped to the ghost-hem shield -->
+  <g clip-path="url(#shield)">
+    <rect x="0" y="0" width="100" height="230" fill="url(#gl)"/>
+    <rect x="100" y="0" width="100" height="230" fill="url(#gr)"/>
+  </g>
+  <path d="M44,28 H156 A16,16 0 0 1 172,44 V186 A18,18 0 0 1 136,186 A18,18 0 0 1 100,186 A18,18 0 0 1 64,186 A18,18 0 0 1 28,186 V44 A16,16 0 0 1 44,28 Z" fill="none" stroke="#1a1326" stroke-width="5" stroke-linejoin="round"/>
+  <!-- seam + forehead scar -->
+  <g stroke="#1a1326" stroke-width="3" stroke-linecap="round" fill="none">
+    <path d="M100,32 V182"/>
+    <path d="M100,40 l-8,0 M100,52 l8,0 M100,64 l-8,0 M100,76 l8,0 M100,152 l-8,0 M100,164 l8,0 M100,176 l-8,0" stroke-width="2.5"/>
+    <polyline points="40,57 50,67 60,57 70,67 80,57 90,67 100,57 110,67 120,57 130,67 140,57 150,67 160,57" stroke="#ffd166" stroke-width="3" stroke-linejoin="round"/>
+  </g>
+  <!-- left eye: ordinary eye -->
+  <g>
+    <circle cx="66" cy="102" r="15" fill="#fff" stroke="#1a1326" stroke-width="3"/>
+    <circle cx="69" cy="103" r="6.5" fill="#1a1326"/><circle cx="71" cy="100.5" r="2" fill="#fff"/>
+    <path d="M48,84 L82,90" stroke="#1a1326" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <!-- right eye: agent node graph -->
+  <g>
+    <circle cx="134" cy="102" r="15" fill="#1a1326" stroke="#1a1326" stroke-width="3"/>
+    <g stroke="#ffd166" stroke-width="2"><path d="M127,97 L141,97 L134,110 Z" fill="none"/></g>
+    <g fill="#ffd166"><circle cx="127" cy="97" r="3"/><circle cx="141" cy="97" r="3"/><circle cx="134" cy="110" r="3"/></g>
+    <path d="M118,90 L152,84" stroke="#1a1326" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <!-- stitched mouth -->
+  <g stroke="#1a1326" stroke-width="3" stroke-linecap="round">
+    <path d="M62,146 H138" fill="none"/>
+    <path d="M70,139 v14 M82,139 v14 M94,139 v14 M106,139 v14 M118,139 v14 M130,139 v14" stroke-width="2.5"/>
+  </g>
+</g></g><text x="560" y="330" font-family="DejaVu Sans, Verdana, Helvetica, Arial, sans-serif" font-size="84" font-weight="800" fill="#e8e4f0">Suppl<tspan fill="#ff9f43">AI</tspan>Guard</text><text x="563" y="378" font-family="DejaVu Sans, Verdana, Helvetica, Arial, sans-serif" font-size="24" fill="#9a93ad">Secure locally. Verify continuously. Ship confidently.</text></svg>

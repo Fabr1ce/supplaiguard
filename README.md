@@ -1,7 +1,27 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="SupplAIGuard: a stitched green and purple ghost-shield with a Frankenstein head" width="560">
+</p>
+
 # SupplAIGuard
 
 **Autonomous security for AI-native applications.**
 *Prevent locally. Detect continuously. Remediate intelligently. Verify automatically.*
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2ea44f?style=for-the-badge"></a>
+  <img alt="Kiroween 2026: Frankenstein" src="https://img.shields.io/badge/Kiroween%202026-Frankenstein-ff7518?style=for-the-badge">
+  <img alt="Built with Kiro" src="https://img.shields.io/badge/built%20with-Kiro-8e44ff?style=for-the-badge">
+</p>
+<p align="center">
+  <img alt="Kiro CLI v3" src="https://img.shields.io/badge/Kiro%20CLI-v3-8e44ff?style=flat-square">
+  <img alt="Custom agents: 6" src="https://img.shields.io/badge/custom%20agents-6-blueviolet?style=flat-square">
+  <img alt="Python 3.15" src="https://img.shields.io/badge/python-3.15-3776AB?style=flat-square&logo=python&logoColor=white">
+  <img alt="Vulnerability data: OSV.dev" src="https://img.shields.io/badge/vuln%20data-OSV.dev-4285F4?style=flat-square&logo=google&logoColor=white">
+  <img alt="Property-based tests: Hypothesis" src="https://img.shields.io/badge/tests-property--based%20(Hypothesis)-3f8f3f?style=flat-square">
+  <img alt="Scanner dependencies: none" src="https://img.shields.io/badge/scanner%20deps-none%20(stdlib)-lightgrey?style=flat-square">
+  <a href="https://github.com/Fabr1ce/supplaiguard/commits"><img alt="Last commit" src="https://img.shields.io/github/last-commit/Fabr1ce/supplaiguard?style=flat-square"></a>
+  <a href="https://github.com/Fabr1ce/supplaiguard/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/Fabr1ce/supplaiguard?style=flat-square&logo=github"></a>
+</p>
 
 SupplAIGuard protects the software supply chain of AI applications. Beyond
 traditional dependency scanners, it analyzes AI-specific components — MCP server
@@ -54,8 +74,9 @@ benchmark against other coding agents.
 
 ## Quick start
 
-**You need:** [Kiro CLI](https://kiro.dev/docs/cli/setup/) v3 (signed in), Python 3.9+,
-and internet access to `api.osv.dev` (the only external call).
+**You need:** [Kiro CLI](https://kiro.dev/docs/cli/setup/) v3 (signed in), Python (3.15, the
+latest stable, is recommended and pinned in `.python-version`; the scanner is standard-library
+only and was also run on 3.10), and internet access to `api.osv.dev` (the only external call).
 
 ```bash
 git clone https://github.com/Fabr1ce/supplaiguard.git
@@ -74,6 +95,18 @@ Expected: 8 findings and exit code `1` — a vulnerable `lodash@4.17.4`, plus MC
 AGT-001/004 and SKL-002/005 from the seeded insecure configs. Point it at any repo:
 `python3 scanner/sg_scan.py /path/to/your/repo`. Add `--offline` to skip OSV (reported as
 an error, not as clean).
+
+Useful flags: `--format md|html` (job-summary Markdown or a self-contained HTML report),
+`--fail-on high` (only exit 1 for findings at or above a severity), `--out-dir DIR` (write
+`findings.json`, `summary.md` and `report.html`), `--environment local|ci`.
+
+Run the property-based tests (Hypothesis; the scanner itself needs no dependencies):
+
+```bash
+uv venv --python 3.15 scanner/.venv
+uv pip install --python scanner/.venv/bin/python -r scanner/requirements-dev.txt
+scanner/.venv/bin/python -m pytest scanner/tests -q
+```
 
 **2. Run the agents from any repository.** Install them globally once:
 

@@ -107,7 +107,7 @@ submittable product exists at the end of each block (cut from the bottom if time
 - [x] 17. Deterministic scanner `scanner/sg_scan.py` (MCP/AGT/SKL + npm/PyPI via OSV) _(R14.1–14.3)_
 - [x] 18. Demos: `crypt-keeper-mcp` (MCP server), `haunted-storyteller` (Strands app), `vulnerable-ai-app`
 - [ ] 19. Phase 2 remainder
-  - [ ] 19.1 Wire scanner into threat-analysis + verification prompts/skills; `install.sh` copies `scanner/`; shell allow-list permits it _(R14.4)_
+  - [x] 19.1 Scanner wired into threat-analysis + verification prompts; `install.sh` copies it to `~/.kiro/supplaiguard/scanner/`; both agents' shell rules allow exactly `python3 ~/.kiro/supplaiguard/scanner/sg_scan.py *` _(R14.4)_. Not yet exercised by a live agent run (see 19.2)
   - [ ] 19.2 Interactive end-to-end run from a demo dir; closes 13.3, 13.4, 13.7
   - [ ] 19.3 Demo READMEs (which findings are seeded on purpose)
   - [ ] 19.4 README rewrite (banner, mermaid loop, one-line-per-file tree, v3 run instructions)
@@ -119,15 +119,15 @@ submittable product exists at the end of each block (cut from the bottom if time
 
 ### Block A — Submittable core (do first)
 - [ ] 20. CI workflow
-  - [ ] 20.1 Add `--format md|html|json` and `--fail-on <severity>` to the scanner _(R15.4, R18.8)_
+  - [x] 20.1 Added `--format md|html|json`, `--fail-on`, `--environment`, `--out-dir` to the scanner; reports escape all untrusted text and ship no scripts _(R15.4, R18.8)_
   - [ ] 20.2 Spike: confirm Dependabot-run secret behavior and a read-only token on a throwaway repo; record result in design _(R15.3, R15.5)_
   - [ ] 20.3 Write `.github/workflows/scan.yml` (`workflow_call`) with scan job only; least privilege; SHA-pinned actions _(R15.1, R15.4, R15.6)_
   - [ ] 20.4 Consumer example `examples/consumer-workflow.yml` using `@<sha>` _(R15.2)_
   - [ ] 20.5 Self-scan workflow in this repo _(R18.9)_
   - [ ] 20.6 Add `agent-triage` job with Kiro CLI headless, explicit `--trust-tools`, `--require-mcp-startup`; scanner remains gate on failure _(R15.5, R15.7)_
-- [ ] 21. Property-based tests _(R18.6)_
-  - [ ] 21.1 Add `scanner/tests/` with pytest + Hypothesis, properties 1–4 from design
-  - [ ] 21.2 Run in CI; list what PBT caught in the write-up
+- [~] 21. Property-based tests _(R18.6)_
+  - [x] 21.1 `scanner/tests/test_properties.py` (pytest 9.2.0 + Hypothesis 6.170.15, Python 3.15): 11 tests covering never-clean-on-error, threshold exit codes, semver order, schema validity, strictly-newer fixes, every-installed-version-checked, report escaping, and a demo regression corpus
+  - [ ] 21.2 Run in CI (pending the workflow); **what PBT caught:** `lock_packages` keyed results by package name, so when a lockfile held several versions of one package only one was checked and a vulnerable older copy could go unreported (false negative). Found by `test_every_installed_version_of_a_package_is_checked`, fixed by returning every `(name, version)` pair. Also caught a Python 3.10 incompatibility (backslash in an f-string expression) while refactoring
 
 ### Block B — The story
 - [ ] 22. Remediation PRs in CI
