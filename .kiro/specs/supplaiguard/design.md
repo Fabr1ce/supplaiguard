@@ -439,3 +439,126 @@ starts a new agent loop).
   is restricted to the OSV host.
 - **OSV failure path:** simulate network failure and confirm no false all-clear
   (R2.7).
+
+---
+
+# Phase 3 Design — CI Mode, Evolution Loop, Kiroween
+
+Traceability: R13–R18 in `requirements.md`.
+
+## Phase 2 as built (summary)
+
+`scanner/sg_scan.py` (stdlib only) is the deterministic core; v3 agents run it first and
+use the LLM for SKL-* semantics, triage and remediation. `install.sh` puts agents in
+`~/.kiro/agents` and policies/skills/scanner in `~/.kiro/supplaiguard/`.
+
+## Topology: three repos
+
+```
+ org repos (consumers)            supplaiguard (this repo, public)         supplaiguard-crew (separate public repo)
+ ─────────────────────            ────────────────────────────────         ────────────────────────────────────────
+ .github/workflows/sg.yml  ──uses@SHA──▶  .github/workflows/scan.yml (workflow_call)
+        │                                  scanner/, .kiro/agents, skills, steering
+        │  sanitized evolution report                     ▲
+        └──────────── PR/issue via GitHub App ────────────┤
+                                                          │ reviewed by
+                                                          └────────────────  Kiro Crew "steward" (schedule + heartbeat + lessons)
+```
+
+- **Shared definition:** the reusable workflow and the agents live in one repo. In an org
+  this is `<org>/supplaiguard` (or `<org>/.github`); consumers reference it with
+  `uses: <org>/supplaiguard/.github/workflows/scan.yml@<full-commit-sha>`.
+  Pinning by SHA is required (R15.2).
+- **Why a separate Crew repo:** the Best Kiro Crew App bonus needs its own repo (R18.7).
+
+## CI workflow (`scan.yml`, `on: workflow_call`)
+
+Jobs, in order, each with minimal `permissions:`:
+
+1. **scan** (`contents: read`): checkout the consumer repo, check out the pinned
+   SupplAIGuard ref into `.sg/`, run `python3 .sg/scanner/sg_scan.py . --format json`.
+   No secrets. Writes `findings.json`, a Markdown job summary, and an HTML report artifact.
+   Exit code drives the gate (`1` = findings ≥ threshold → fail; `2` = error → fail closed).
+2. **agent-triage** (only if `KIRO_API_KEY` present and PR is not from a fork):
+   install Kiro CLI, run
+   `kiro-cli chat --v3 --no-interactive --agent supplaiguard-coordinator --trust-tools=<explicit list> --require-mcp-startup --output-format stream-json "…"`.
+   Output is attached to the summary. If it fails, job is `continue-on-error` and the
+   scanner result remains the gate (R15.7).
+3. **propose-fix** (`contents: write`, `pull-requests: write`; skipped for forks): apply the
+   remediation to branch `supplaiguard/fix-<scan_id>`, **re-run the scanner on the patched
+   tree** (verification), then open a PR whose body contains the before/after report and
+   PASS/FAIL/NEEDS_REVIEW (R16.1–16.2). Never pushes to the PR branch or default branch.
+4. **evolve** (opt-in; see below).
+
+### Dependabot / security-PR handling (R15.3)
+
+Trigger: `pull_request` filtered by `github.actor == 'dependabot[bot]'` or labels
+`dependencies`/`security`. Known platform constraints to design around (verify in task 20.2):
+- Workflows triggered by Dependabot get a read-only token and **cannot read normal repo
+  secrets**; a `KIRO_API_KEY` must be added as a *Dependabot secret*, or the run stays
+  scanner-only. The summary states which mode ran.
+- Do not switch to `pull_request_target` to get secrets: that runs with write access in the
+  context of untrusted PR content.
+- On a Dependabot PR, SupplAIGuard's added value is: re-scan the *resulting* lockfile (does the
+  bump actually clear the advisory? did it introduce a new one?), then comment the verdict.
+  On non-Dependabot PRs it scans the diff and the full tree.
+
+## Review and merge (R16.3)
+
+The Kiro GitHub app may review/comment (`/kiro` commands) on SupplAIGuard PRs. Merge stays
+human. This keeps `security-policy.md` rule 1 intact. Labels: `supplaiguard`, `needs-human`
+for high-impact changes (major bump, MCP command/transport, permission changes).
+
+## Evolution loop (R17)
+
+```
+CI run ─▶ sanitized report (rule ids, counts, outcomes, versions) ─▶ PR/issue to supplaiguard repo
+        ─▶ Crew steward triages (dedupe, label, reproduce with a fixture) ─▶ proposes rule/skill change PR
+        ─▶ scanner tests + PBT + demo corpus must pass ─▶ human merges ─▶ new pinned SHA ─▶ orgs bump pin
+```
+
+- **Sanitization is allow-list based:** the report schema has fixed fields only; there is no
+  free-text field that could carry source or secrets. A schema check in CI rejects anything else.
+- **Trust:** reports are untrusted input. They are parsed as data, never executed or pasted into
+  an agent prompt verbatim.
+- **Delivery credential:** GitHub App installation token with `issues:write` / `pull_requests:write`
+  on the supplaiguard repo only (R17.3). Fallback for the hackathon demo: `workflow_dispatch`
+  with a fine-scoped token, clearly labelled as demo-only.
+- **Opt-in, off by default** (`evolve: true` input).
+- **Pinning closes the loop:** improvements ship as a new SHA/tag; consumers choose when to bump.
+  This keeps the "continuously evolving" claim compatible with pinned dependencies.
+
+## Kiro Crew steward (separate repo `supplaiguard-crew`)
+
+Crew is a persistent, self-learning agent runtime with scheduled jobs, heartbeats, subagents
+and lessons (docs: kiro.dev/docs/crew). Planned role:
+- **Schedule:** daily job lists open `supplaiguard-evolution` issues/PRs, groups duplicates.
+- **Heartbeat:** watches the shared workflow's recent runs and alerts on repeated fail-closed errors.
+- **Lessons:** maintainer corrections ("never relax MCP-001") are stored as lessons.
+- **Subagents:** parallel triage of reports; each proposes a fixture + rule diff.
+Unverified until task 26.1: how a Crew app is packaged/declared and what the minimal repo must
+contain. Do not build the steward before that spike.
+
+## Polished surface (Design criterion)
+
+- `sg_scan.py --format html` produces a single self-contained report page (severity summary,
+  per-finding evidence, before/after diff, verification verdict, local-vs-CI badge). Published
+  as a CI artifact and on GitHub Pages for the demo.
+- `--format md` produces the job summary.
+- Optional Halloween styling in the HTML only; keep it readable.
+
+## Property-based testing (R18.6)
+
+Hypothesis tests in `scanner/tests/`:
+1. For any generated list of OSV responses including errors, `exit_code == 2` whenever any lookup errored (never clean).
+2. `compare_versions` is antisymmetric and transitive over generated semver-ish strings.
+3. Every finding the scanner emits validates against the findings schema.
+4. `recommended_version > current_version` for all dependency findings.
+5. Sanitizer: for any generated finding, the evolution report contains none of the finding's `evidence` strings.
+
+## Demo script (≤ 3:00)
+
+0:00 problem (AI configs are a supply-chain gap) → 0:30 local: coordinator finds lodash + MCP issues
+→ 1:10 approve fix, verification PASS → 1:30 push PR; shared workflow runs, Dependabot-style
+bump verified → 2:10 fix PR with before/after, Kiro reviews, human merges → 2:35 evolution
+report becomes a PR; Crew steward triages → 2:50 `.kiro` tour card + tagline.

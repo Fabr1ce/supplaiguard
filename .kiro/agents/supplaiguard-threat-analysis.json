@@ -3,8 +3,13 @@
   "description": "SupplAIGuard Threat Analysis agent. Queries OSV.dev for dependency vulnerabilities and evaluates MCP/agent configurations against deterministic security rules, emitting schema-conformant findings.",
   "prompt": "file://./prompts/threat-analysis.md",
   "mcpServers": {},
-  "tools": ["read", "shell"],
-  "allowedTools": ["read"],
+  "tools": [
+    "read",
+    "shell"
+  ],
+  "allowedTools": [
+    "read"
+  ],
   "toolsSettings": {
     "execute_bash": {
       "allowedCommands": [
@@ -13,21 +18,74 @@
         "echo .*",
         "jq .*"
       ],
-      "deniedCommands": ["rm .*", "sudo .*", "curl .* http://.*", "bash .*", "sh .*"]
+      "deniedCommands": [
+        "rm .*",
+        "sudo .*",
+        "curl .* http://.*",
+        "bash .*",
+        "sh .*"
+      ]
     },
     "fs_write": {
-      "deniedPaths": ["**"]
+      "deniedPaths": [
+        "**"
+      ]
     }
   },
   "resources": [
-    "file://.kiro/steering/security-policy.md",
-    "file://.kiro/steering/severity-and-confidence.md",
-    "file://.kiro/steering/ai-component-security-rules.md",
-    "file://.kiro/skills/sg-osv-dependency-scan/SKILL.md",
-    "file://.kiro/skills/sg-ai-component-rules/SKILL.md",
-    "file://.kiro/skills/sg-findings-schema/SKILL.md"
+    "file://~/.kiro/supplaiguard/steering/security-policy.md",
+    "file://~/.kiro/supplaiguard/steering/severity-and-confidence.md",
+    "file://~/.kiro/supplaiguard/steering/ai-component-security-rules.md",
+    "file://~/.kiro/supplaiguard/skills/sg-osv-dependency-scan/SKILL.md",
+    "file://~/.kiro/supplaiguard/skills/sg-ai-component-rules/SKILL.md",
+    "file://~/.kiro/supplaiguard/skills/sg-findings-schema/SKILL.md"
   ],
-  "hooks": {},
+  "hooks": [],
   "useLegacyMcpJson": true,
-  "model": null
+  "model": null,
+  "permissions": {
+    "rules": [
+      {
+        "capability": "shell",
+        "match": [
+          "curl -s https://api.osv.dev/*",
+          "curl -s -X POST -d @- https://api.osv.dev/*",
+          "echo *",
+          "jq *"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "shell",
+        "match": [
+          "rm *",
+          "sudo *",
+          "curl * http://*",
+          "bash *",
+          "sh *"
+        ],
+        "effect": "deny"
+      },
+      {
+        "capability": "fs_write",
+        "match": [
+          "**"
+        ],
+        "effect": "deny"
+      },
+      {
+        "capability": "fs_read",
+        "effect": "allow"
+      },
+      {
+        "capability": "skill",
+        "effect": "allow"
+      }
+    ]
+  },
+  "kiroUpgrade": {
+    "revision": 2,
+    "fingerprint": "sha256:5a6af50dbd0c658f99c4e27ba42fd97cfc84d2056f5ed86831eb9aa469214d7d",
+    "source": "sha256:51edfaa12867f7857bec04b9d11a10453cfb4c5719d3bbe1c11300c068456151"
+  }
 }

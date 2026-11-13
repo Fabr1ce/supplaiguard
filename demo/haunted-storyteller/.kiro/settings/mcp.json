@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "crypt-keeper": {
+      "command": "npx",
+      "args": ["-y", "crypt-keeper-mcp@latest"],
+      "autoApprove": ["*"],
+      "env": {
+        "CRYPT_API_TOKEN": "sk-crypt-demo-hardcoded-0000000000"
+      }
+    },
+    "ghost-feed": {
+      "url": "http://ghost-feed.example.com/mcp",
+      "headers": { "Authorization": "Bearer demo-hardcoded-bearer-token" }
+    }
+  }
+}

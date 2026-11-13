@@ -1,0 +1,14 @@
+# Build / dependency output
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.hypothesis/
+
+# Local editor / OS noise
+.DS_Store
+
+# NOTE: do NOT add .kiro or any path under it here.
+# The Kiroween 2026 rules require /.kiro to be committed; ignoring it can disqualify the submission.

@@ -92,3 +92,73 @@ schema → agents → coordinator → hooks → demo repo → end-to-end verific
 
 - [x] 14. Documentation
   - [x] 14.1 Added top-level `README.md` describing the local lifecycle, Coordinator invocation, the post-task review flow, and the demo walkthrough _(supports R11.4, R12)_
+
+---
+
+# Phase 2 (status) and Phase 3 (plan)
+
+Deadline: **Fri Dec 4, 2026, 2:00 PM PT**. Today is Nov 12, so ~22 days. Priorities are ordered so a
+submittable product exists at the end of each block (cut from the bottom if time runs short).
+
+## Phase 2 — status (from `notes/phase2-checkpoint.md`)
+
+- [x] 15. v3 agent configs (`kiro-cli agent upgrade`), all validate _(R13)_
+- [x] 16. `install.sh` global install with `--dry-run`/`--uninstall` _(R13)_
+- [x] 17. Deterministic scanner `scanner/sg_scan.py` (MCP/AGT/SKL + npm/PyPI via OSV) _(R14.1–14.3)_
+- [x] 18. Demos: `crypt-keeper-mcp` (MCP server), `haunted-storyteller` (Strands app), `vulnerable-ai-app`
+- [ ] 19. Phase 2 remainder
+  - [ ] 19.1 Wire scanner into threat-analysis + verification prompts/skills; `install.sh` copies `scanner/`; shell allow-list permits it _(R14.4)_
+  - [ ] 19.2 Interactive end-to-end run from a demo dir; closes 13.3, 13.4, 13.7
+  - [ ] 19.3 Demo READMEs (which findings are seeded on purpose)
+  - [ ] 19.4 README rewrite (banner, mermaid loop, one-line-per-file tree, v3 run instructions)
+  - [x] 19.5 MIT `LICENSE` added; root `.gitignore` added and does NOT ignore `.kiro` _(R18.2–18.3)_. Still open: decide on `demo/vulnerable-ai-app/.kiro/agents/overprivileged.json.bak`
+  - [x] 19.6 Remote `Fabr1ce/supplaiguard` is public with `initial commit` 3637eef (2026-11-12), same as local HEAD; proves new-work dates _(R18.1)_. Local work is uncommitted; `git push` over SSH fails here (no key), see decisions below
+  - [ ] 19.7 Confirm GitHub shows "MIT" in the repo About box after the license is pushed _(R18.2)_
+
+## Phase 3 — CI mode, evolution, Kiroween
+
+### Block A — Submittable core (do first)
+- [ ] 20. CI workflow
+  - [ ] 20.1 Add `--format md|html|json` and `--fail-on <severity>` to the scanner _(R15.4, R18.8)_
+  - [ ] 20.2 Spike: confirm Dependabot-run secret behavior and a read-only token on a throwaway repo; record result in design _(R15.3, R15.5)_
+  - [ ] 20.3 Write `.github/workflows/scan.yml` (`workflow_call`) with scan job only; least privilege; SHA-pinned actions _(R15.1, R15.4, R15.6)_
+  - [ ] 20.4 Consumer example `examples/consumer-workflow.yml` using `@<sha>` _(R15.2)_
+  - [ ] 20.5 Self-scan workflow in this repo _(R18.9)_
+  - [ ] 20.6 Add `agent-triage` job with Kiro CLI headless, explicit `--trust-tools`, `--require-mcp-startup`; scanner remains gate on failure _(R15.5, R15.7)_
+- [ ] 21. Property-based tests _(R18.6)_
+  - [ ] 21.1 Add `scanner/tests/` with pytest + Hypothesis, properties 1–4 from design
+  - [ ] 21.2 Run in CI; list what PBT caught in the write-up
+
+### Block B — The story
+- [ ] 22. Remediation PRs in CI
+  - [ ] 22.1 `propose-fix` job: branch `supplaiguard/fix-<scan_id>`, patch, re-scan, open PR with before/after + verdict _(R16.1–16.2)_
+  - [ ] 22.2 Labels incl. `needs-human` for high-impact; no merge step anywhere _(R16.3–16.4)_
+  - [ ] 22.3 Install the Kiro GitHub app on the demo org/repo and confirm `/kiro` review on a SupplAIGuard PR (spike; record outcome) _(R16.3)_
+- [ ] 23. HTML report + GitHub Pages _(R18.8)_
+- [ ] 24. Demo repo for CI: a consumer repo with a seeded Dependabot-style bump PR
+
+### Block C — Evolution loop + Crew (bonus prize)
+- [ ] 25. Evolution report
+  - [ ] 25.1 Define allow-list schema `evolution-report.schema.json`; sanitizer + property test 5 _(R17.1)_
+  - [ ] 25.2 `evolve` job (opt-in) opens a PR/issue on this repo via GitHub App token _(R17.2–17.3)_
+  - [ ] 25.3 Acceptance gate: scanner tests + PBT + demo corpus must pass for any rule change _(R17.5)_
+- [ ] 26. Crew steward (new repo `supplaiguard-crew`)
+  - [ ] 26.1 **Spike first:** install Kiro Crew, learn how a Crew app is packaged and what the repo must contain for the bonus prize _(R18.7)_
+  - [ ] 26.2 Scheduled triage job + heartbeat + one stored lesson
+  - [ ] 26.3 Create the repo (public, same GitHub account, new during the period) with README
+
+### Block D — Submission
+- [ ] 27. Request Kiro credits (**by Dec 1**, ID check) — user action
+- [ ] 28. Kiro-usage write-up: IDE vs CLI vs Web vs Crew, agents, hooks, specs vs vibe, steering, MCP, PBT, powers _(R18.5)_
+- [ ] 29. Demo video script + recording ≤ 3:00, uploaded public to YouTube _(R18.4)_
+- [ ] 30. Blog post and `#KiroweenHackathon26` social post, URLs in the form _(R18.10)_
+- [ ] 31. Final checks: license visible, `.kiro` not ignored, repo public, run instructions tested from a clean clone _(R18.2–18.4)_
+
+## Open risks
+- **Merge wording:** the note says Kiro may "merge if good to go with human approval". Plan keeps merging human-only to honour policy rule 1; confirm that is acceptable.
+- **Kiro API key in CI:** headless needs `KIRO_API_KEY`; if unavailable the demo shows scanner-only plus local agents.
+- **Crew packaging unknown** until task 26.1; Block C may shrink.
+- **Sharing pattern:** everything lives under the `Fabr1ce` account (shared `supplaiguard` repo, a consumer demo repo, later `supplaiguard-crew`). The consumer calls the shared workflow via `uses: Fabr1ce/supplaiguard/.github/workflows/scan.yml@<sha>`.
+- **No `KIRO_API_KEY`** in this environment yet; needed for the headless CI job (task 20.6) and must be stored as a repo secret, never committed.
+- **Push access:** remote is SSH, no SSH key here; `gh` is authenticated over HTTPS (scopes: repo, workflow, read:org).
+- **Credits:** headless CI runs consume Kiro credits; keep triage runs small.

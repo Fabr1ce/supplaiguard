@@ -260,3 +260,77 @@ model missed.
 6. THE Review agent SHALL check the completed work against the relevant requirement acceptance criteria and the steering security policy, and SHALL flag any deviation.
 7. IF the configured reviewer model is unavailable THEN the hook SHALL fail safe: surface a clear warning and SHALL NOT block or discard the completed task's work.
 8. WHERE repeated automatic review on every turn is undesirable THE hook MAY use a `confirm` block (supported on `Stop` command hooks) or an `enabled: false` toggle so the developer controls when review runs.
+
+---
+
+# Phase 2 & 3 Additions
+
+Source: `notes/phase2-checkpoint.md` (Phase 2, built) and
+`../notes/uptomize.md` (Phase 3, planned: CI mode + self-evolution + hackathon fit).
+
+Phase 2 changed two Phase 1 assumptions, recorded here so the spec stays honest:
+- Agents target **Kiro CLI v3** (`permissions.rules`), not the 2.x schema used in Phase 1.
+- Detection is **hybrid**: a deterministic scanner (`scanner/sg_scan.py`) does exact-match
+  rules and OSV lookups; the LLM handles SKL-* semantics, triage and remediation.
+  This supersedes "agents call `curl` to OSV directly" in R2.1 and R3.1.
+
+### Requirement 13 — Global Install (Phase 2, built)
+
+**User story:** As a developer, I want SupplAIGuard runnable from any repository.
+
+1. `install.sh` SHALL install agents to `~/.kiro/agents` and policies, skills and the scanner to `~/.kiro/supplaiguard/`, and SHALL NOT place policies in `~/.kiro/steering` (they would load into every chat).
+2. `install.sh` SHALL support `--dry-run` and `--uninstall`.
+3. Agents SHALL be discoverable from any working directory after install.
+
+### Requirement 14 — Deterministic Scanner (Phase 2, built; agent wiring pending)
+
+1. The scanner SHALL implement MCP-001..005, AGT-001..004, SKL-001..005 exactly as defined in the steering catalog, plus npm `package-lock.json` and PyPI `requirements*.txt` (`==` pins) lookups via OSV.dev.
+2. The scanner SHALL exit 0 (clean), 1 (findings), 2 (errors) and SHALL NEVER report a clean result when OSV was unreachable.
+3. The scanner output SHALL conform to `sg-findings-schema`.
+4. Threat-analysis and verification agents SHALL run the scanner first and use the LLM only for SKL semantics, triage and explanation. Verification SHALL re-run the same scanner so local and CI results are comparable.
+
+### Requirement 15 — CI Mode via Shared Org Workflow (Phase 3)
+
+**User story:** As a platform owner, I want repos whose developers did not run SupplAIGuard locally to still get scanned in CI, from one shared definition.
+
+1. THE project SHALL provide a reusable workflow (`on: workflow_call`) hosted in one shared repository, consumable by any repo in the org with a one-line `uses:` reference.
+2. Consumers SHALL pin the shared workflow and the SupplAIGuard agents/scanner to a **commit SHA or signed tag**, not a branch (supply-chain rule: do not ship an unpinned remote dependency from a tool that flags unpinned remote dependencies).
+3. THE workflow SHALL trigger on `pull_request` (opened, synchronize, reopened), on a schedule, and on `workflow_dispatch`. It SHALL give special handling to Dependabot and other security-update PRs (author `dependabot[bot]`, label `security`/`dependencies`).
+4. THE workflow SHALL always run the deterministic scanner (no API key required) and SHALL publish a job summary and a pass/fail gate by severity threshold.
+5. WHERE `KIRO_API_KEY` is available THE workflow SHALL additionally run Kiro CLI headless (`kiro-cli chat --v3 --no-interactive --agent supplaiguard-coordinator`, with explicit `--trust-tools`, never `--trust-all-tools`) for triage and remediation proposals. WHERE it is not available (forks, Dependabot without a Dependabot-scoped secret) THE workflow SHALL degrade to scanner-only and say so in the summary.
+6. THE workflow SHALL use least-privilege `permissions:`, SHALL NOT use `pull_request_target` to run untrusted PR code, and SHALL NOT expose secrets to forked PRs.
+7. IF a Kiro run fails or the sandbox/MCP cannot start THEN the workflow SHALL fail closed on the scanner result, never silently pass.
+
+### Requirement 16 — CI Remediation PRs and Review (Phase 3)
+
+1. WHEN findings have `remediation_available: true` THE workflow SHALL open a PR from a dedicated branch (e.g. `supplaiguard/fix-<scan_id>`) containing the proposed fix, the before/after report, and the verification result. It SHALL NOT push to the PR's own branch or default branch.
+2. THE remediation PR SHALL only be opened after the Verification stage re-runs the scanner on the patched tree. The PR body SHALL state PASS / FAIL / NEEDS_REVIEW.
+3. THE Kiro GitHub app MAY review these PRs. SupplAIGuard SHALL NOT merge. Merging remains a human action, consistent with `security-policy.md` rule 1. (The note's "merge if good to go with human approval" is interpreted as: Kiro recommends, a human approves and merges.)
+4. High-impact changes (major bumps, MCP command/transport, permission changes) SHALL be labelled `needs-human` and SHALL NOT be auto-approved by any agent.
+
+### Requirement 17 — Continuous Evolution Loop (Phase 3)
+
+**User story:** As a SupplAIGuard maintainer, I want every CI run to feed back what the agents got wrong or missed, so the rules and agents improve over time.
+
+1. WHEN an org enables the feature (opt-in, off by default) THE CI run SHALL emit a **sanitized evolution report**: rule IDs hit, counts, false-positive/unresolved signals, verification outcomes, scanner/agent version. It SHALL NOT contain source code, config excerpts, secret values, repo names (unless the org opts in), or file contents.
+2. THE report SHALL be delivered as a PR (or issue) to the SupplAIGuard repository proposing a concrete change (new/adjusted rule, skill wording, fixture) with a regression fixture added to the demo/test corpus.
+3. Cross-repo delivery SHALL use a GitHub App installation token or equivalent scoped credential, not a broad PAT.
+4. Evolution PRs SHALL be treated as **untrusted input**: they only add structured data and fixtures; a maintainer (or the maintainer-side Crew, see design) reviews them; nothing auto-merges.
+5. A proposed rule change SHALL be accepted only if the scanner's test suite and the demo corpus still produce the expected findings (no regression).
+
+### Requirement 18 — Kiroween 2026 Readiness
+
+Source: `../notes/kiroween/{kiroween.md,rules.md,resources.txt}` (verified against the 2026 pages).
+Deadline: **Fri Dec 4, 2026, 2:00 PM PT**. Credits request: by Dec 1 (4,000 credits, ID check); redeem by Dec 4.
+Target category: **Frankenstein** (security scanner + LLM agents + CI + a self-evolving Crew loop). Bonus targets: **Best Kiro Crew App**, **Best Demo**, **Bonus Blog**, **Social Blitz**.
+
+1. **New work only.** Everything submitted SHALL be created on/after Oct 30, 2026. Any pre-existing code or work SHALL be disclosed in the README. (Repo history starts Nov 2026; keep commits from the start so this is provable.)
+2. THE repository SHALL be public on **GitHub** with an OSI-approved `LICENSE` detectable in the repo "About" box, containing all source, assets and run instructions.
+3. `/.kiro` SHALL be at the repo root and SHALL NOT appear in any `.gitignore` (disqualification risk).
+4. THE submission SHALL include a working-app URL or equivalent run instructions that judges can follow, a text description, and a public YouTube demo video under **3 minutes** showing the project working end to end, with no third-party trademarks or copyrighted music.
+5. THE README/write-up SHALL cover every Kiro feature used, with repo pointers: IDE/CLI/Web/Crew differences, custom agents, hooks, spec-driven vs vibe coding, steering, MCP, **property-based testing**, and powers (if any).
+6. **Property-based testing:** THE scanner SHALL have property-based tests (e.g. Hypothesis) for invariants such as: never reports clean when OSV errored; version comparison is a total order; every emitted finding validates against `sg-findings-schema`; "fixed version" is always greater than the installed version.
+7. **Best Kiro Crew App:** THE Crew component SHALL live in a **separate public GitHub repo**, created during the period, under the same GitHub account as the main submission, with its own README describing features.
+8. THE judging criteria are five, equally weighted: Potential Impact, Technological Implementation, Design, Innovation, Presentation. The plan SHALL include a polished user-facing surface (not only JSON): a CI job summary and a generated HTML report (see design), so Design is not a proof-of-concept.
+9. THE project SHALL scan its own `.kiro/` in CI (self-scan) as dogfooding proof.
+10. Bonus content: a public blog post (mentioning Kiroween 2026) and a social post with `#KiroweenHackathon26` as the first token, both published inside the submission period, with URLs added to the form.
