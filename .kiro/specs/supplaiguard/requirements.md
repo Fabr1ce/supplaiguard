@@ -265,7 +265,7 @@ model missed.
 
 # Phase 2 & 3 Additions
 
-Source: `notes/phase2-checkpoint.md` (Phase 2, built) and
+Source: `../notes/phase2-checkpoint.md` (Phase 2, built) and
 `../notes/uptomize.md` (Phase 3, planned: CI mode + self-evolution + hackathon fit).
 
 Phase 2 changed two Phase 1 assumptions, recorded here so the spec stays honest:

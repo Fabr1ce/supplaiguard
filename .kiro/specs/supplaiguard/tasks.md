@@ -100,7 +100,7 @@ schema → agents → coordinator → hooks → demo repo → end-to-end verific
 Deadline: **Fri Dec 4, 2026, 2:00 PM PT**. Today is Nov 12, so ~22 days. Priorities are ordered so a
 submittable product exists at the end of each block (cut from the bottom if time runs short).
 
-## Phase 2 — status (from `notes/phase2-checkpoint.md`)
+## Phase 2 — status (from `../notes/phase2-checkpoint.md`)
 
 - [x] 15. v3 agent configs (`kiro-cli agent upgrade`), all validate _(R13)_
 - [x] 16. `install.sh` global install with `--dry-run`/`--uninstall` _(R13)_
