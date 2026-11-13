@@ -52,7 +52,7 @@ SupplAIGuard is deliberately **hybrid**:
 | Prove it worked | Scanner re-run by the Verification agent | A file edit is never treated as "resolved" |
 
 The agents never replace the deterministic checks; they sit on top of them, connect the
-dots, and act — within hard limits (read-only roles, scoped writes, no auto-merge).
+dots, and act, within hard limits (read-only roles, scoped writes, no auto-merge).
 
 ### Why Kiro
 
