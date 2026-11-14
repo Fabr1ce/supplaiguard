@@ -10,5 +10,8 @@ __pycache__/
 # Local editor / OS noise
 .DS_Store
 
+# Logo build script: kept local for now (the generated SVG/PNG files in assets/ are committed).
+assets/build_logo.py
+
 # NOTE: do NOT add .kiro or any path under it here.
 # The Kiroween 2026 rules require /.kiro to be committed; ignoring it can disqualify the submission.
