@@ -1,0 +1,22 @@
+{
+  "suppressions": [
+    {
+      "rule_id": "SKL-002",
+      "source": "skills/sg-ai-component-rules/SKILL.md",
+      "reason": "This skill documents the SKL-002 phrase it detects ('disable/bypass security checks'). It describes the attack, it does not instruct it.",
+      "expires": "2027-03-01"
+    },
+    {
+      "rule_id": "SKL-003",
+      "source": "skills/sg-ai-component-rules/SKILL.md",
+      "reason": "This skill documents the SKL-003 example ('curl ... | bash') that it detects. It is a description, not an instruction to run it.",
+      "expires": "2027-03-01"
+    },
+    {
+      "rule_id": "SKL-002",
+      "source": "agents/supplaiguard-threat-analysis.json",
+      "reason": "The agent prompt gives 'an instruction to bypass safety' as an example of an attack path to look for. Descriptive, not an instruction.",
+      "expires": "2027-03-01"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+name: Self-scan
+
+# SupplAIGuard scans its own .kiro directory (agents, skills, steering) on every push and pull request.
+# It calls the same reusable workflow that other repositories use, so this is also its live test.
+#
+# Note: suppressions are read from the PR *base* commit. A pull request that first introduces or edits
+# .supplaiguard/suppressions.json is therefore scanned with the OLD file. That is intentional: a PR must
+# not be able to hide its own findings.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  scan:
+    # Fork PRs cannot fetch a commit that only exists in the fork, and get no secrets anyway.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/scan.yml
+    with:
+      sg-ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      path: .kiro
+      fail-on: low
+      suppressions-file: .supplaiguard/suppressions.json
+      agent-triage: false
