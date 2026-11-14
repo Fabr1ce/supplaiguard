@@ -85,14 +85,11 @@ def emblem() -> str:
     return loop() + f'<g transform="translate({CX - 80},{CY - 88}) scale(0.8)">{mark_group()}</g>'
 
 
-def word(x, y, size, tag, line):
-    stages = " → ".join(n for n, _ in STAGES)
+def word(x, y, size, tag):
     return (f'<text x="{x}" y="{y}" font-family="{FONT}" font-size="{size}" font-weight="800" fill="#e8e4f0">'
             f'Suppl<tspan fill="#ff9f43">AI</tspan>Guard</text>'
             f'<text x="{x + 3}" y="{y + tag * 2.2:.0f}" font-family="{FONT}" font-size="{tag}" fill="#9a93ad">'
-            f'Secure locally. Verify continuously. Ship confidently.</text>'
-            f'<text x="{x + 3}" y="{y + tag * 2.2 + line * 1.9:.0f}" font-family="{FONT}" font-size="{line}" fill="#c9c3dc">'
-            f'{stages} → back to Discover</text>')
+            f'Secure locally. Verify continuously. Ship confidently.</text>')
 
 
 def svg(w, h, body):
@@ -104,10 +101,10 @@ def svg(w, h, body):
 
 
 def main():
-    (HERE / "logo.svg").write_text(svg(1010, 350, emblem() + word(450, 170, 56, 16, 14)))
+    (HERE / "logo.svg").write_text(svg(940, 350, emblem() + word(450, 182, 56, 16)))
     (HERE / "logo-loop.svg").write_text(svg(420, 350, emblem()))
     (HERE / "social-preview.svg").write_text(
-        svg(1280, 640, f'<g transform="translate(40,60) scale(1.45)">{emblem()}</g>' + word(655, 300, 62, 18, 14)))
+        svg(1280, 640, f'<g transform="translate(40,60) scale(1.45)">{emblem()}</g>' + word(655, 322, 62, 18)))
     try:
         import cairosvg
     except ImportError:

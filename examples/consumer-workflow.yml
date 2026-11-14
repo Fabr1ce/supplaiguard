@@ -1,0 +1,35 @@
+# Copy this file to  .github/workflows/supplaiguard.yml  in any repository you want scanned.
+#
+# 1. Replace both <FULL_COMMIT_SHA> values with the SAME 40-character commit SHA of
+#    Fabr1ce/supplaiguard that you have reviewed (git rev-parse HEAD in a checkout).
+#    Branch and tag references are rejected on purpose: this tool flags unpinned remote
+#    dependencies, so it must not be one.
+# 2. Optional: add a KIRO_API_KEY secret to turn on the experimental agent triage.
+#    Dependabot-triggered runs read secrets from the *Dependabot* secrets store, not the
+#    normal one (Settings > Secrets and variables > Dependabot).
+# 3. Optional: add a suppressions file for reviewed false positives. It is read from the
+#    pull request's BASE commit, so a PR cannot suppress its own findings.
+
+name: SupplAIGuard
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  schedule:
+    - cron: "17 5 * * 1" # weekly, catches advisories published after the last PR
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  supplaiguard:
+    permissions:
+      contents: read
+    uses: Fabr1ce/supplaiguard/.github/workflows/scan.yml@<FULL_COMMIT_SHA>
+    with:
+      sg-ref: <FULL_COMMIT_SHA>
+      fail-on: high
+      # suppressions-file: .supplaiguard/suppressions.json
+      # agent-triage: true
+    # secrets:
+    #   KIRO_API_KEY: ${{ secrets.KIRO_API_KEY }}

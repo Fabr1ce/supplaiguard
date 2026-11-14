@@ -120,14 +120,17 @@ submittable product exists at the end of each block (cut from the bottom if time
 ### Block A — Submittable core (do first)
 - [ ] 20. CI workflow
   - [x] 20.1 Added `--format md|html|json`, `--fail-on`, `--environment`, `--out-dir` to the scanner; reports escape all untrusted text and ship no scripts _(R15.4, R18.8)_
-  - [ ] 20.2 Spike: confirm Dependabot-run secret behavior and a read-only token on a throwaway repo; record result in design _(R15.3, R15.5)_
-  - [ ] 20.3 Write `.github/workflows/scan.yml` (`workflow_call`) with scan job only; least privilege; SHA-pinned actions _(R15.1, R15.4, R15.6)_
-  - [ ] 20.4 Consumer example `examples/consumer-workflow.yml` using `@<sha>` _(R15.2)_
-  - [ ] 20.5 Self-scan workflow in this repo _(R18.9)_
-  - [ ] 20.6 Add `agent-triage` job with Kiro CLI headless, explicit `--trust-tools`, `--require-mcp-startup`; scanner remains gate on failure _(R15.5, R15.7)_
+  - [ ] 20.2 Spike: confirm Dependabot-run secret behavior and a read-only token on a throwaway repo; record result in design _(R15.3, R15.5)_. Until verified, `examples/consumer-workflow.yml` states it as expected behavior (Dependabot reads its own secrets store)
+  - [x] 20.3 `.github/workflows/scan.yml` (`workflow_call`): SHA-pinned actions, per-job least privilege, inputs via `env:`, sg-ref must be a full SHA, suppressions from the PR base commit. `actionlint` clean. Live run: see 20.5 _(R15.1, R15.4, R15.6)_
+  - [x] 20.4 `examples/consumer-workflow.yml` (placeholders for the pinned SHA) _(R15.2)_
+  - [~] 20.5 `.github/workflows/self-scan.yml` written (calls the reusable workflow on `.kiro`, `fail-on: low`). First real run happens on the PR; the PR that introduces `.supplaiguard/suppressions.json` is scanned with the base's (absent) file, so that one run is expected to fail by design _(R18.9)_
+  - [~] 20.6 `agent-triage` job written, OFF by default, advisory, **untested** (no API key yet). Hardened after finding that headless Kiro auto-loads workspace agents/steering/MCP config: runs in an empty directory, read-only tools, deny rules for /proc, /etc, ~/.ssh. Still to do: `--require-mcp-startup` is unnecessary with no MCP servers; pin the Kiro installer version/checksum if published _(R15.5, R15.7)_
+  - [x] 20.7 Scanner suppressions (reason required, no blanket entries, expiry, always listed, broken file exits 2) + `.supplaiguard/suppressions.json` for our own docs _(R19)_
+  - [x] 20.8 Scanner robustness found by property tests: odd JSON shapes no longer crash the scan (each file is guarded, failures become scan errors, exit 2); non-object MCP entries and unparseable configs are errors, not silent skips; agent configs with no `name` (optional in Kiro) are now scanned; any internal error exits 2 _(R19)_
+  - [ ] 20.9 Optional `--baseline FILE` to report new vs fixed findings against the PR base
 - [~] 21. Property-based tests _(R18.6)_
-  - [x] 21.1 `scanner/tests/test_properties.py` (pytest 9.2.0 + Hypothesis 6.170.15, Python 3.15): 11 tests covering never-clean-on-error, threshold exit codes, semver order, schema validity, strictly-newer fixes, every-installed-version-checked, report escaping, and a demo regression corpus
-  - [ ] 21.2 Run in CI (pending the workflow); **what PBT caught:** `lock_packages` keyed results by package name, so when a lockfile held several versions of one package only one was checked and a vulnerable older copy could go unreported (false negative). Found by `test_every_installed_version_of_a_package_is_checked`, fixed by returning every `(name, version)` pair. Also caught a Python 3.10 incompatibility (backslash in an f-string expression) while refactoring
+  - [x] 21.1 `scanner/tests/test_properties.py` (pytest 9.2.0 + Hypothesis 6.170.15, Python 3.15): 36 tests (was 11) covering never-clean-on-error, threshold exit codes, semver order, schema validity, strictly-newer fixes, every-installed-version-checked, report escaping, and a demo regression corpus
+  - [ ] 21.2 Run in CI (pending the workflow); **what PBT caught:** `lock_packages` keyed results by package name, so when a lockfile held several versions of one package only one was checked and a vulnerable older copy could go unreported (false negative). Found by `test_every_installed_version_of_a_package_is_checked`, fixed by returning every `(name, version)` pair. Also caught: odd-but-valid JSON crashed the scanner with exit 1 and no report (so a hostile file could kill a scan and look like "findings"); agent configs without a `name` field were silently skipped; a Python 3.10 incompatibility (backslash in an f-string expression)
 
 ### Block B — The story
 - [ ] 22. Remediation PRs in CI
