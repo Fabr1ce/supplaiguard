@@ -62,7 +62,7 @@ schema → agents → coordinator → hooks → demo repo → end-to-end verific
   - [x] 8.2 Write its prompt enforcing "resolved only if re-check clears it", regression detection, before/after report keyed by finding `id` _(R6.2, R6.4, R6.5, R6.6)_
 
 - [x] 9. Author the Coordinator agent
-  - [x] 9.1 Create `.kiro/agents/supplaiguard-coordinator.json` with `delegate` + `toolsSettings.subagent.availableAgents` limited to the four domain agents (remediation NOT trusted so it still prompts), no write _(R7.1, R7.5)_
+  - [x] 9.1 Create `.kiro/agents/supplaiguard-coordinator.json` with `delegate` + `toolsSettings.subagent.availableAgents` limited to the four domain agents (remediation NOT trusted so it still prompts), no write _(R7.1, R7.5)_. **Correction (2026-11-13):** a live run showed this config could not start any sub-agent in v3 (`delegate` is a 2.x tool). Now `tools` lists `subagent/<name>` for exactly the four agents. Also, in v3 the parent's policy applies to sub-agent calls and a deny wins, so the Coordinator asks (not denies) for writes; secrets stay denied. Covered by `scanner/tests/test_agent_policy.py`. Still to confirm in a live run: sub-agents start, the scanner call runs without a prompt, and each write prompts
   - [x] 9.2 Write its prompt enforcing stage order (Discovery→Threat→[approval]→Remediation→Verification), schema-preserving hand-offs, consolidated final report _(R7.2, R7.3, R7.4)_
 
 - [x] 10. Author local hooks  _(`version:"v1"` array form; JSON validated)_

@@ -161,11 +161,12 @@ AGT-001/004 and SKL-002/005 from the seeded insecure configs. Point it at any re
 `python3 scanner/sg_scan.py /path/to/your/repo`. Add `--offline` to skip OSV (reported as
 an error, not as clean).
 
-Useful flags: `--format md|html` (job-summary Markdown or a self-contained HTML report),
-`--fail-on high` (only exit 1 for findings at or above a severity), `--out-dir DIR` (write
-`findings.json`, `summary.md` and `report.html`), `--environment local|ci`, and `--suppressions FILE`
-(reviewed false positives: each needs a reason, a rule plus a file, and can expire; suppressed findings
-are still listed in every report, and a broken file exits 2).
+Useful flags:
+- `--format md|html` prints a Markdown summary or a self-contained HTML report **to the terminal**; it does not save a file. To save it: `python3 scanner/sg_scan.py <repo> --format html > report.html`.
+- `--out-dir DIR` **saves** `findings.json`, `summary.md` and `report.html` into `DIR` (and still prints the JSON).
+- `--fail-on high` makes the exit code 1 only for findings at or above that severity.
+- `--environment local|ci` labels the scan; it defaults to `ci` when `GITHUB_ACTIONS=true`.
+- `--suppressions FILE` applies reviewed false positives: each needs a reason, a rule plus a file, and can expire; suppressed findings are still listed in every report, and a broken file exits 2.
 
 Run the property-based tests (Hypothesis; the scanner itself needs no dependencies):
 

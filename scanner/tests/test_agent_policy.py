@@ -34,7 +34,10 @@ def test_all_six_agents_are_present():
     assert set(AGENTS) == {*READ_ONLY, "remediation"}
 
 
-@pytest.mark.parametrize("agent", READ_ONLY)
+DENY_WRITES = tuple(a for a in READ_ONLY if a != "coordinator")
+
+
+@pytest.mark.parametrize("agent", DENY_WRITES)
 def test_read_only_roles_deny_every_write_and_allow_none(agent):
     assert "**" in patterns(agent, "fs_write", "deny"), f"{agent} must deny fs_write on **"
     assert not rules(agent, "fs_write", "allow"), f"{agent} must never allow writes"
@@ -91,3 +94,38 @@ def test_no_agent_has_a_wildcard_allow(agent):
 def test_coordinator_does_not_pre_approve_the_remediation_agent():
     allowed = patterns("coordinator", "subagent", "allow")
     assert "supplaiguard-remediation" not in allowed, "starting the writing agent must still prompt the human"
+
+
+# ---- the coordinator must actually be able to start its four sub-agents in Kiro CLI v3 ----
+SUBAGENTS = ("supplaiguard-discovery", "supplaiguard-threat-analysis", "supplaiguard-remediation", "supplaiguard-verification")
+
+
+def test_coordinator_can_start_exactly_its_four_subagents():
+    """A live run showed 'I have no delegate tool': in v3 the orchestrator needs subagent/<name> in `tools`."""
+    tools = AGENTS["coordinator"]["tools"]
+    assert {t for t in tools if t.startswith("subagent/")} == {f"subagent/{n}" for n in SUBAGENTS}, tools
+
+
+def test_coordinator_uses_no_legacy_or_overbroad_tools():
+    tools = AGENTS["coordinator"]["tools"]
+    assert "delegate" not in tools, "`delegate` is a CLI 2.x tool and does not exist in v3"
+    assert not {"*", "@builtin", "write", "shell"} & set(tools), (
+        "'*' and '@builtin' include a tool that can start ANY agent; the coordinator must not write or run a shell itself")
+
+
+def test_coordinator_prompt_does_not_tell_it_to_use_a_tool_it_does_not_have():
+    text = (AGENTS_DIR / "prompts" / "coordinator.md").read_text().lower()
+    assert "delegate tool" not in text
+
+
+def test_coordinator_never_blocks_the_remediation_subagent_but_never_writes_silently():
+    """In v3 a deny in the PARENT policy also denies sub-agent calls, so a blanket deny here would break step 3.
+    The coordinator has no write tool; writes made by sub-agents must still ask the human (stricter side wins)."""
+    assert "**" not in patterns("coordinator", "fs_write", "deny"), "a blanket write deny would block remediation"
+    assert not rules("coordinator", "fs_write", "allow"), "never silently allow writes"
+    assert "**" in patterns("coordinator", "fs_write", "ask"), "every sub-agent write must still ask the human"
+    assert any(".env" in p for p in patterns("coordinator", "fs_write", "deny")), "secrets stay denied"
+
+
+def test_coordinator_allows_the_scanner_so_subagents_can_run_it_silently():
+    assert "python3 ~/.kiro/supplaiguard/scanner/sg_scan.py *" in patterns("coordinator", "shell", "allow")
