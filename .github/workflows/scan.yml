@@ -254,6 +254,10 @@ jobs:
 
       - name: Install the agents and deny sensitive reads
         if: ${{ steps.gate.outputs.run == 'true' }}
+        env:
+          # install.sh validates each agent with `kiro-cli agent validate`, which needs to be authenticated.
+          # This step runs only the pinned SupplAIGuard install.sh, never code from the scanned repository.
+          KIRO_API_KEY: ${{ secrets.KIRO_API_KEY }}
         run: |
           set -euo pipefail
           export PATH="$HOME/.local/bin:$PATH"
