@@ -6,12 +6,20 @@ name: Self-scan
 # Note: suppressions are read from the PR *base* commit. A pull request that first introduces or edits
 # .supplaiguard/suppressions.json is therefore scanned with the OLD file. That is intentional: a PR must
 # not be able to hide its own findings.
+#
+# Agent triage (headless Kiro) runs only when started by hand with agent-triage: true. The KIRO_API_KEY
+# secret is passed only on those manual runs, never on pull_request or push runs.
 
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      agent-triage:
+        description: EXPERIMENTAL. Also run headless Kiro triage (uses KIRO_API_KEY and Kiro credits).
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -27,4 +35,6 @@ jobs:
       path: .kiro
       fail-on: low
       suppressions-file: .supplaiguard/suppressions.json
-      agent-triage: false
+      agent-triage: ${{ github.event_name == 'workflow_dispatch' && inputs.agent-triage }}
+    secrets:
+      KIRO_API_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.agent-triage && secrets.KIRO_API_KEY || '' }}
