@@ -562,3 +562,38 @@ Hypothesis tests in `scanner/tests/`:
 → 1:10 approve fix, verification PASS → 1:30 push PR; shared workflow runs, Dependabot-style
 bump verified → 2:10 fix PR with before/after, Kiro reviews, human merges → 2:35 evolution
 report becomes a PR; Crew steward triages → 2:50 `.kiro` tour card + tagline.
+
+---
+
+# Phase 3 Design Addendum (2026-11-13): as built
+
+Traceability: R15, R19.
+
+## Reusable workflow as built (`.github/workflows/scan.yml`)
+
+- `workflow_call` with inputs `sg-ref` (required, full 40-char SHA), `sg-repository`, `path`, `fail-on`,
+  `suppressions-file`, `python-version`, `allow-unpinned`, `agent-triage`. Optional secret `KIRO_API_KEY`.
+- The scanner is fetched as a tarball by SHA from codeload into `$RUNNER_TEMP`, not checked out into the
+  workspace, so the scan never sees SupplAIGuard's own seeded demo files.
+- All workflow inputs reach shell steps through `env:` and are validated first (no expression interpolation
+  inside `run:`), so a caller cannot inject commands.
+- Gate: scanner exit 0 pass, 1 findings at or above `fail-on`, 2 incomplete. A crash that leaves no report is
+  forced to 2.
+- Job summary (Markdown), downloadable artifact (`findings.json`, `summary.md`, `report.html`).
+- Dependabot: scanned like any PR; the summary notes the result describes the post-update dependencies.
+  Secrets for Dependabot-triggered runs live in the Dependabot secrets store (to verify, task 20.2).
+- Actions pinned by SHA: checkout v7.0.1, setup-python v7.1.0, upload-artifact v7.0.2, download-artifact v8.0.2.
+
+## Suppressions
+
+`sg_scan.py --suppressions FILE`. Entry: `{rule_id | type} + {component | source}`, `reason` (required),
+`expires` (optional, inclusive). Matching findings move to `suppressed` with `suppressed_reason`. In CI the
+file comes from the PR base commit. The first PR that adds the file is scanned without it (by design).
+
+## Headless Kiro in CI: trust boundary
+
+`kiro-cli chat --no-interactive` loads the workspace's custom agents, steering and MCP server config without
+a trust prompt. Therefore the optional `agent-triage` job never runs inside the checkout of the repository
+being scanned. It runs in an empty directory containing only `findings.json`, with `--trust-tools=read_file,grep_search`,
+user-level deny rules (`fs_read` on `/proc`, `/etc`, `~/.ssh`, `~/.aws`, `~/.config`; no shell; no writes),
+no run for fork PRs, advisory only (`continue-on-error`). Not yet exercised with a real API key.

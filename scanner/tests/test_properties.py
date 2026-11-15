@@ -208,3 +208,136 @@ def test_demo_corpus_still_produces_expected_ai_findings(demo, minimum):
     rules = {f.get("rule_id") for f in out["findings"]}
     assert {"MCP-001", "MCP-003", "MCP-005", "AGT-001", "AGT-004", "SKL-002", "SKL-005"} <= rules
     assert sum(1 for f in out["findings"] if f.get("rule_id")) >= minimum
+
+
+# ---------------------------------------------------------------- P7: suppressions are visible, reasoned and fail closed
+from datetime import date, timedelta  # noqa: E402
+
+
+def fake_finding(i, rule="SKL-002", source=None):
+    return {"id": f"SG-{i:03d}", "type": "suspicious_agent_skill", "component": f"c{i}", "severity": "high",
+            "confidence": "high", "source": source or f"s{i}.md", "rule_id": rule, "evidence": "x",
+            "description": "d", "remediation_available": True, "status": "open"}
+
+
+@FAST
+@given(n=st.integers(1, 8), picks=st.sets(st.integers(0, 7)))
+def test_suppression_never_drops_a_finding(n, picks):
+    findings = [fake_finding(i) for i in range(n)]
+    supps = [{"rule_id": "SKL-002", "source": f"s{i}.md", "reason": "documented example"} for i in picks if i < n]
+    out = sg_scan.apply_suppressions({"findings": list(findings), "errors": []}, supps)
+    hidden = out.get("suppressed", [])
+    assert len(out["findings"]) + len(hidden) == n, "every finding is either reported or listed as suppressed"
+    assert all(h["suppressed_reason"] == "documented example" for h in hidden)
+    assert {f["id"] for f in out["findings"]} | {h["id"] for h in hidden} == {f["id"] for f in findings}
+
+
+def test_only_unsuppressed_findings_drive_the_exit_code():
+    out = sg_scan.apply_suppressions({"findings": [fake_finding(1)], "errors": []},
+                                     [{"rule_id": "SKL-002", "source": "s1.md", "reason": "r"}])
+    assert sg_scan.exit_code(out) == 0 and len(out["suppressed"]) == 1
+
+
+@pytest.mark.parametrize("entry,why", [
+    ({"rule_id": "SKL-002", "source": "a.md"}, "no reason"),
+    ({"rule_id": "SKL-002", "source": "a.md", "reason": "  "}, "blank reason"),
+    ({"rule_id": "SKL-002", "reason": "r"}, "rule only: would hide it everywhere"),
+    ({"source": "a.md", "reason": "r"}, "source only: would hide every rule in the file"),
+    ({"rule_id": "SKL-002", "source": "a.md", "reason": "r", "rulee_id": "x"}, "typo in a key"),
+    ({"rule_id": "SKL-002", "source": "a.md", "reason": "r", "expires": "next week"}, "bad date"),
+    ("not an object", "wrong shape"),
+])
+def test_bad_suppression_entries_fail_closed(tmp_path, entry, why):
+    f = write(tmp_path, "sup.json", json.dumps({"suppressions": [entry]}))
+    good, errors = sg_scan.load_suppressions(f)
+    assert good == [] and errors, why
+    out = sg_scan.apply_suppressions({"findings": [fake_finding(1, source="a.md")], "errors": list(errors)}, good)
+    assert len(out["findings"]) == 1 and "suppressed" not in out, "a bad entry must hide nothing"
+    assert sg_scan.exit_code(out) == 2, "and the scan must not look clean"
+
+
+@pytest.mark.parametrize("text", ["{not json", "[]", '{"suppressions": "x"}'])
+def test_unreadable_suppression_file_fails_closed(tmp_path, text):
+    good, errors = sg_scan.load_suppressions(write(tmp_path, "sup.json", text))
+    assert good == [] and errors
+
+
+def test_missing_suppression_file_fails_closed(tmp_path):
+    good, errors = sg_scan.load_suppressions(tmp_path / "nope.json")
+    assert good == [] and errors
+
+
+def test_expired_suppression_brings_the_finding_back():
+    today = date(2026, 11, 13)
+    s = [{"rule_id": "SKL-002", "source": "s1.md", "reason": "r", "expires": (today - timedelta(days=1)).isoformat()}]
+    out = sg_scan.apply_suppressions({"findings": [fake_finding(1)], "errors": []}, s, today)
+    assert len(out["findings"]) == 1 and "suppressed" not in out
+    s[0]["expires"] = today.isoformat()  # last valid day is inclusive
+    out = sg_scan.apply_suppressions({"findings": [fake_finding(1)], "errors": []}, s, today)
+    assert out["findings"] == [] and len(out["suppressed"]) == 1
+
+
+def test_reports_show_suppressed_findings_and_their_reason():
+    out = sg_scan.apply_suppressions(
+        {"repository": "r", "scan_id": "s", "environment": "ci", "generated_at": "t", "errors": [],
+         "findings": [fake_finding(1)]},
+        [{"rule_id": "SKL-002", "source": "s1.md", "reason": "docs <b>describe</b> the phrase"}])
+    md, page = sg_scan.render_md(out), sg_scan.render_html(out)
+    assert "Suppressed (1)" in md and "Suppressed (1)" in page
+    assert "<b>describe" not in md and "<b>describe" not in page, "the reason must not inject markup"
+    assert "&lt;b&gt;describe" in md and "&lt;b&gt;describe" in page, "it is shown escaped instead"
+
+
+# ---------------------------------------------------------------- P8: hostile or odd files must never crash the scan
+json_values = st.recursive(
+    st.one_of(st.none(), st.booleans(), st.integers(), st.text(max_size=12)),
+    lambda kids: st.one_of(st.lists(kids, max_size=3), st.dictionaries(st.text(max_size=8), kids, max_size=4)),
+    max_leaves=12,
+)
+KEYED = st.sampled_from(["packages", "dependencies", "mcpServers", "tools", "allowedTools", "permissions",
+                         "rules", "toolsSettings", "name", "prompt", "autoApprove", "env", "args", "command"])
+shaped = st.dictionaries(KEYED, json_values, max_size=6)
+
+
+@pytest.mark.parametrize("rel,body", [
+    ("package-lock.json", {"packages": 5}),
+    ("package-lock.json", {"packages": {"node_modules/a": 5}}),
+    ("package-lock.json", {"dependencies": {"a": 5}}),
+    (".kiro/agents/a.json", {"name": "a", "tools": 5, "permissions": {"rules": 7}}),
+    (".kiro/agents/a.json", {"name": "a", "permissions": {"rules": [5, "x"]}}),
+    (".kiro/settings/mcp.json", {"mcpServers": {"s": 3}}),
+    (".kiro/settings/mcp.json", {"mcpServers": [1, 2]}),
+])
+def test_structurally_wrong_files_become_errors_not_crashes(tmp_path, rel, body):
+    write(tmp_path, rel, json.dumps(body))
+    out = sg_scan.run_scan(tmp_path, offline=True)  # must not raise
+    assert sg_scan.exit_code(out) != 0, "a file the scanner could not interpret must never read as clean"
+
+
+@FAST
+@given(lock=shaped, agent=shaped, mcp=shaped)
+def test_arbitrary_json_never_crashes_the_scan(lock, agent, mcp):
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        write(root, "package-lock.json", json.dumps(lock))
+        write(root, ".kiro/agents/a.json", json.dumps({"name": "a", **agent}))
+        write(root, ".kiro/settings/mcp.json", json.dumps(mcp))
+        out = sg_scan.run_scan(root, offline=True)  # must not raise
+    assert sg_scan.validate_scan(out) == []
+    assert all({"source", "stage", "message"} <= set(e) for e in out["errors"])
+
+
+def test_internal_error_exits_2_with_no_false_findings_code(tmp_path, monkeypatch, capsys):
+    """If something unexpected escapes entirely, the process must exit 2 (never 1 = findings, never 0)."""
+    monkeypatch.setattr(sg_scan, "run_scan", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(sys, "argv", ["sg_scan.py", str(tmp_path)])
+    assert sg_scan.cli() == 2
+    assert "internal error" in capsys.readouterr().err
+
+
+def test_agent_config_without_a_name_field_is_still_scanned(tmp_path):
+    """`name` is optional in Kiro agent configs (derived from the filename); skipping such a file hid real findings."""
+    write(tmp_path, ".kiro/agents/sneaky.json", json.dumps({"tools": ["*"], "allowedTools": ["*"]}))
+    out = sg_scan.run_scan(tmp_path, offline=True)
+    rules = {f["rule_id"] for f in out["findings"] if f["component"] == "sneaky"}
+    assert "AGT-001" in rules, "an over-privileged agent must be found even without a name field"

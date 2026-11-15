@@ -321,7 +321,7 @@ Phase 2 changed two Phase 1 assumptions, recorded here so the spec stays honest:
 ### Requirement 18 — Kiroween 2026 Readiness
 
 Source: `../notes/kiroween/{kiroween.md,rules.md,resources.txt}` (verified against the 2026 pages).
-Deadline: **Fri Dec 4, 2026, 2:00 PM PT**. Credits request: by Dec 1 (4,000 credits, ID check); redeem by Dec 4.
+Deadline: **Fri Dec 4, 2026, 2:00 PM PT**. Free Kiro credits are available to participants, but the author has decided NOT to request them.
 Target category: **Frankenstein** (security scanner + LLM agents + CI + a self-evolving Crew loop). Bonus targets: **Best Kiro Crew App**, **Best Demo**, **Bonus Blog**, **Social Blitz**.
 
 1. **New work only.** Everything submitted SHALL be created on/after Oct 30, 2026. Any pre-existing code or work SHALL be disclosed in the README. (Repo history starts Nov 2026; keep commits from the start so this is provable.)
@@ -334,3 +334,18 @@ Target category: **Frankenstein** (security scanner + LLM agents + CI + a self-e
 8. THE judging criteria are five, equally weighted: Potential Impact, Technological Implementation, Design, Innovation, Presentation. The plan SHALL include a polished user-facing surface (not only JSON): a CI job summary and a generated HTML report (see design), so Design is not a proof-of-concept.
 9. THE project SHALL scan its own `.kiro/` in CI (self-scan) as dogfooding proof.
 10. Bonus content: a public blog post (mentioning Kiroween 2026) and a social post with `#KiroweenHackathon26` as the first token, both published inside the submission period, with URLs added to the form.
+
+### Requirement 19 — Scanner Robustness and Suppressions (added 2026-11-13)
+
+Found by property-based testing and by reviewing the self-scan; applies to local and CI runs alike.
+
+1. THE scanner SHALL process each file independently. IF a file cannot be processed safely (unexpected JSON shape, internal error) THEN the scanner SHALL record a scan error for that file, SHALL continue with the rest, and SHALL exit 2.
+2. THE scanner SHALL NOT silently skip a configuration it cannot interpret (a non-object MCP server entry, a non-object config). It SHALL record a scan error instead.
+3. THE scanner SHALL scan agent configs that have no `name` field, deriving the name from the filename (the field is optional in Kiro).
+4. THE scanner SHALL check every installed version of a package in a lockfile, not one version per package name.
+5. ANY unexpected internal error SHALL exit 2. Exit 1 is reserved for "findings at or above the threshold" and exit 0 for a complete, clean scan.
+6. THE scanner SHALL support reviewed suppressions. Each entry SHALL have a non-empty `reason`, SHALL name a rule or type AND a component or source (no blanket entries), MAY have an `expires` date, and SHALL reject unknown keys.
+7. Suppressed findings SHALL NOT be deleted: they SHALL appear in `suppressed` in the JSON and in every rendered report, with their reason.
+8. A malformed, unreadable or missing suppressions file SHALL hide nothing and SHALL make the scan exit 2.
+9. IN CI on a pull request, suppressions SHALL be read from the PR base commit, never from the PR head, so a PR cannot suppress its own findings.
+10. WHEN Kiro CLI runs headless in CI THEN it SHALL run in a directory that does not contain the scanned repository, because non-interactive runs load the workspace's agents, steering and MCP configuration without a trust prompt.

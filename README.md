@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="SupplAIGuard: a stitched green and purple ghost-shield with a Frankenstein head" width="560">
+  <img src="assets/logo.svg" alt="SupplAIGuard logo: a stitched green and purple Frankenstein ghost-shield inside a five-step loop: Discover, Analyze, Remediate, Verify, Learn, then back to Discover" width="760">
 </p>
 
 # SupplAIGuard
@@ -32,7 +32,7 @@ deterministic tools miss.
 
 Traditional supply-chain tools (Dependabot, `npm audit`, Snyk, GHAS) are deterministic and
 excellent at what they do: match a package version against an advisory. But each works in
-its own silo — one looks at dependencies, another at code, none read your MCP config or
+its own silo: one looks at dependencies, another at code, none read your MCP config or
 your agent definitions, and none connect what they find.
 
 AI-native apps break that model, because the risk is in the *combination*:
@@ -72,11 +72,76 @@ SupplAIGuard is built *with* Kiro and *on* Kiro, and each Kiro feature maps to a
 Kiro Powers aren't used yet. This is our reading of why the pieces fit together, not a
 benchmark against other coding agents.
 
+## How it works
+
+Every run is the same loop: **Discover, Analyze, Remediate, Verify, Learn**. The deterministic scanner
+does the exact checks, Kiro agents do the reasoning and the fixing, and you decide what changes.
+
+```mermaid
+flowchart LR
+    you(["You run the coordinator"])
+    save(["You save a manifest<br/>or agent config"])
+
+    d["1 Discover<br/>Discovery agent"]
+    a["2 Analyze<br/>Threat Analysis agent"]
+    ok{{"YOU approve<br/>every file write"}}
+    r["3 Remediate<br/>Remediation agent"]
+    v["4 Verify<br/>Verification agent<br/>PASS, FAIL or NEEDS_REVIEW"]
+    l["5 Learn<br/>planned"]
+    scan[["Deterministic scanner<br/>rules + OSV.dev"]]
+    rev["Reviewer agent<br/>different model, read-only"]
+
+    you --> d
+    save -.->|"hook: analyze on save"| d
+    d --> a
+    a --> ok
+    ok -->|"approved"| r
+    r -->|"hook: verify after a write"| v
+    v --> l
+    l -.->|"back to Discover"| d
+    a --- scan
+    v --- scan
+    v -.->|"hook: task finished"| rev
+
+    classDef human fill:#ffe9a8,stroke:#d49a00,color:#222,stroke-width:2px
+    classDef planned fill:#f1f1f1,stroke:#999,color:#444,stroke-dasharray:5 4
+    classDef core fill:#dff5e1,stroke:#3a9d4f,color:#222
+    classDef agent fill:#fff,stroke:#333,color:#222
+    class ok human
+    class l planned
+    class scan core
+    class d,a,r,v,rev agent
+```
+
+<sub>Yellow is a human decision. Green is deterministic code. Dashed grey is planned. Hooks sit on the arrows they fire on.</sub>
+
+### Where each Kiro feature is used
+
+| Kiro feature | Where | What it does here |
+|---|---|---|
+| **Custom agents** | `.kiro/agents/` | Six agents, each with its own permissions: coordinator, discovery, threat analysis, remediation, verification, and a reviewer that runs on a different model. Only remediation can write. |
+| **Skills** | `.kiro/skills/` | The procedures the agents follow: `sg-npm-inventory` (Discover), `sg-osv-dependency-scan` and `sg-ai-component-rules` (Analyze), `sg-remediation` (Remediate), `sg-verification` (Verify), `sg-findings-schema` (the shared output format). |
+| **Steering** | `.kiro/steering/` | Always-on rules every agent follows: the security policy, severity and confidence scoring, and the rule catalog. |
+| **Hooks** | `.kiro/hooks/` | Analyze when a manifest or agent config is saved; verify after a write; have the reviewer agent check each finished task. |
+| **Headless CLI** | CI, experimental | Optional triage of the findings in an empty directory with read-only tools (off by default). |
+| **Kiro GitHub app, Kiro Crew** | planned | The app to address review comments on fix PRs; a Crew steward to triage what CI learns. |
+
+### Where you stay in control
+
+1. **Every file write asks you first.** The Remediation agent can only edit manifests and agent or MCP config, each edit prompts you, and secret files are denied outright. Dependency installs prompt too, because install scripts run code.
+2. **High-impact changes need your explicit approval:** major version bumps, MCP command changes and permission changes.
+3. **Nothing is "resolved" because a file changed.** A finding is resolved only when the Verification agent's re-scan no longer reports it.
+4. **Nothing merges itself.** No agent may push or merge, and in CI a fix goes to its own branch and a pull request for you to merge.
+5. **A failed scan is never a clean scan.** If anything cannot be checked, the result is INCOMPLETE (exit code 2).
+
+> Status: the scanner, the CI scan and the agent permissions are tested (the permissions have their own
+> tests). The full live coordinator run and the Stop-review hook are not exercised yet.
+
 ## Quick start
 
 **You need:** [Kiro CLI](https://kiro.dev/docs/cli/setup/) v3 (signed in), Python (3.15, the
 latest stable, is recommended and pinned in `.python-version`; the scanner is standard-library
-only and was also run on 3.10), and internet access to `api.osv.dev` (the only external call).
+only and was also run on 3.10), and internet access to `api.osv.dev` (the only external call). The TypeScript MCP demo needs Node 22 or newer (`.nvmrc` pins 26, the current LTS).
 
 ```bash
 git clone https://github.com/Fabr1ce/supplaiguard.git
@@ -91,14 +156,16 @@ python3 scanner/sg_scan.py demo/vulnerable-ai-app --pretty
 echo "exit code: $?"      # 0 clean | 1 findings | 2 scan errors (never a false all-clear)
 ```
 
-Expected: 8 findings and exit code `1` — a vulnerable `lodash@4.17.4`, plus MCP-001/003/005,
+Expected: 8 findings and exit code `1`: a vulnerable `lodash@4.17.4`, plus MCP-001/003/005,
 AGT-001/004 and SKL-002/005 from the seeded insecure configs. Point it at any repo:
 `python3 scanner/sg_scan.py /path/to/your/repo`. Add `--offline` to skip OSV (reported as
 an error, not as clean).
 
 Useful flags: `--format md|html` (job-summary Markdown or a self-contained HTML report),
 `--fail-on high` (only exit 1 for findings at or above a severity), `--out-dir DIR` (write
-`findings.json`, `summary.md` and `report.html`), `--environment local|ci`.
+`findings.json`, `summary.md` and `report.html`), `--environment local|ci`, and `--suppressions FILE`
+(reviewed false positives: each needs a reason, a rule plus a file, and can expire; suppressed findings
+are still listed in every report, and a broken file exits 2).
 
 Run the property-based tests (Hypothesis; the scanner itself needs no dependencies):
 
@@ -130,18 +197,80 @@ Re-run `./install.sh` after editing anything under `.kiro/`. Remove everything w
 
 > Status: the scanner and the global install are working. Wiring the scanner into the
 > agents' analysis step, the GitHub Actions workflow and the CI evolution loop are in
-> progress — see `.kiro/specs/supplaiguard/tasks.md`.
+> progress; see `.kiro/specs/supplaiguard/tasks.md`.
 
-## Phase 1 (this MVP) — Kiro-native
+## Run it in CI (GitHub Actions)
 
-Phase 1 is built **entirely from Kiro primitives** — no application code:
+Any repository can call the shared, reusable workflow. Copy `examples/consumer-workflow.yml`, and pin
+**both** the `uses:` line and `sg-ref` to the same full commit SHA (branches and tags are rejected on
+purpose: a tool that flags unpinned remote dependencies must not be one).
 
-- **Agents** (`.kiro/agents/*.json`) — a Coordinator plus Discovery, Threat
+```yaml
+jobs:
+  supplaiguard:
+    permissions:
+      contents: read
+    uses: Fabr1ce/supplaiguard/.github/workflows/scan.yml@<FULL_COMMIT_SHA>
+    with:
+      sg-ref: <FULL_COMMIT_SHA>
+      fail-on: high
+```
+
+- **No secrets needed.** The deterministic scan never runs code from the repository it scans.
+- **Gate:** exit 1 means findings at or above `fail-on`; exit 2 means the scan could not finish, which
+  is never treated as clean. Results go to the job summary and a downloadable HTML report.
+- **Suppressions** come from the pull request's *base* commit, so a PR cannot hide its own findings.
+- **Dependabot PRs** are scanned like any other PR, so the result describes the dependencies after the update.
+- **Agent triage** (Kiro CLI headless) is experimental, off by default and not yet tested with a real key.
+  It runs in an empty directory with read-only tools, because headless Kiro loads the workspace's agents,
+  steering and MCP config without a trust prompt.
+- This repository scans its own `.kiro/` with the same workflow (`.github/workflows/self-scan.yml`).
+
+```mermaid
+flowchart LR
+    pr(["Pull request or<br/>Dependabot update"])
+    wf["Reusable workflow scan.yml<br/>pinned to a full commit SHA"]
+
+    subgraph ci["GitHub Actions"]
+        sc["Deterministic scanner<br/>no secrets, never runs repo code<br/>suppressions read from the base commit"]
+        gate{"Gate<br/>0 pass, 1 findings,<br/>2 scan incomplete"}
+        tri["Agent triage, experimental, off by default<br/>Kiro CLI headless in an empty directory<br/>read-only tools, deny rules"]
+        fix["Fix PR on its own branch<br/>re-scanned before it opens<br/>planned"]
+        evo["Sanitized report<br/>rule ids, counts, outcomes only<br/>opt-in, planned"]
+    end
+
+    sum(["Job summary and HTML report"])
+    human{{"A human reviews and merges<br/>nothing auto-merges<br/>Kiro GitHub app can fix review comments, planned"}}
+    maint{{"Maintainer reviews<br/>Kiro Crew steward triages, planned"}}
+    rules["Better rules and skills<br/>shipped as a new pinned SHA"]
+
+    pr --> wf --> sc --> gate
+    sc -.-> tri
+    gate --> sum
+    gate -->|"fix available"| fix --> human
+    gate -->|"opt-in"| evo --> maint --> rules
+    rules -.->|"consumers choose when to bump the pin"| wf
+
+    classDef human fill:#ffe9a8,stroke:#d49a00,color:#222,stroke-width:2px
+    classDef planned fill:#f1f1f1,stroke:#999,color:#444,stroke-dasharray:5 4
+    classDef core fill:#dff5e1,stroke:#3a9d4f,color:#222
+    classDef exp fill:#ffe8d6,stroke:#e07b39,color:#222,stroke-dasharray:5 4
+    class human,maint human
+    class fix,evo,rules planned
+    class sc,gate,wf core
+    class tri exp
+```
+
+## Phase 1 (this MVP): Kiro-native
+
+Phase 1 is built **entirely from Kiro primitives**, with no application code:
+
+- **Agents** (`.kiro/agents/*.json`): a Coordinator plus Discovery, Threat
   Analysis, Remediation, Verification, and an independent Reviewer.
-- **Skills** (`.kiro/skills/*/SKILL.md`) — reusable procedures (npm inventory,
+- **Skills** (`.kiro/skills/*/SKILL.md`): reusable procedures (npm inventory,
   OSV.dev scan, AI-component rules, findings schema, remediation, verification).
-- **Steering** (`.kiro/steering/*.md`) — the governing security policies.
-- **Hooks** (`.kiro/hooks/*.json`) — local automation.
+- **Steering** (`.kiro/steering/*.md`): the governing security policies.
+- **Hooks** (`.kiro/hooks/*.json`): local automation.
 
 Agents do their work with built-in tools (`read`, `write`, `shell`). The only
 external call is to the public **OSV.dev** API for vulnerability intelligence.
@@ -178,10 +307,10 @@ approve, and a finding is `resolved` only after verification re-checks it.
 
 ## Automation hooks
 
-- `analyze-on-manifest-change.json` — re-runs analysis when
+- `analyze-on-manifest-change.json`: re-runs analysis when
   `package.json`/`package-lock.json`/`mcp.json`/agent configs are saved.
-- `verify-after-remediation.json` — requests verification after a write.
-- `review-after-task.json` — on task completion (`Stop`), launches the
+- `verify-after-remediation.json`: requests verification after a write.
+- `review-after-task.json`: on task completion (`Stop`), launches the
   **reviewer agent on a different model** (`kiro-cli chat --agent
   supplaiguard-reviewer`) to cross-check the work. Asks before running and is
   fail-safe (never blocks or discards completed work).
@@ -202,7 +331,7 @@ approve, and a finding is `resolved` only after verification re-checks it.
 
 This project is built spec-first. See:
 
-- `.kiro/specs/supplaiguard/requirements.md` — EARS acceptance criteria.
-- `.kiro/specs/supplaiguard/design.md` — architecture and component designs.
-- `.kiro/specs/supplaiguard/tasks.md` — the implementation plan (traceable to
+- `.kiro/specs/supplaiguard/requirements.md`: EARS acceptance criteria.
+- `.kiro/specs/supplaiguard/design.md`: architecture and component designs.
+- `.kiro/specs/supplaiguard/tasks.md`: the implementation plan (traceable to
   requirements).

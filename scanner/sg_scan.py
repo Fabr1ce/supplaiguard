@@ -9,7 +9,7 @@ review, and remediation.
 
 Usage: sg_scan.py [REPO] [--offline] [--pretty] [--format json|md|html]
                   [--fail-on low|medium|high|critical] [--environment local|ci]
-                  [--out-dir DIR]
+                  [--out-dir DIR] [--suppressions FILE]
 Exit:  0 clean | 1 findings at/above --fail-on | 2 scan errors (never a false all-clear)
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ import os
 import re
 import sys
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 VERSION = "0.2.0"
@@ -106,11 +106,19 @@ def pinned(args: list[str], command: str) -> bool:
 
 def scan_mcp(scan: Scan, p: Path):
     data = load_json(scan, p, "threat_analysis")
-    if not isinstance(data, dict):
-        return
+    if data is None:
+        return  # already recorded as unparseable
     src = rel(scan, p)
-    for name, srv in (data.get("mcpServers") or {}).items():
+    if not isinstance(data, dict):
+        scan.error(src, "threat_analysis", "MCP config must be a JSON object; the file was not analysed")
+        return
+    servers = data.get("mcpServers") or {}
+    if not isinstance(servers, dict):
+        scan.error(src, "threat_analysis", "'mcpServers' must be an object; the file was not analysed")
+        return
+    for name, srv in servers.items():
         if not isinstance(srv, dict):
+            scan.error(src, "threat_analysis", f"MCP server {str(name)[:40]!r} is not an object; it was not analysed")
             continue
         auto = srv.get("autoApprove")
         if auto == True or (isinstance(auto, list) and "*" in auto):  # noqa: E712
@@ -172,9 +180,13 @@ def scan_skl(scan: Scan, component: str, source: str, text: str):
 
 def scan_agent(scan: Scan, p: Path):
     agent = load_json(scan, p, "threat_analysis")
-    if not isinstance(agent, dict) or "name" not in agent:
+    if agent is None:
+        return  # already recorded as unparseable
+    src = rel(scan, p)
+    if not isinstance(agent, dict):
+        scan.error(src, "threat_analysis", "agent config must be a JSON object; the file was not analysed")
         return
-    src, name = rel(scan, p), agent["name"]
+    name = str(agent.get("name") or p.stem)  # `name` is optional: Kiro derives it from the filename
     caps = agent_caps(agent)
     if caps["wildcard"]:
         scan.add(type="excessive_tool_permissions", component=name, severity="high", source=src,
@@ -291,18 +303,26 @@ def run_scan(repo: Path, offline: bool = False, environment: str | None = None) 
     """Run every check and return a scan object per the sg-findings-schema skill."""
     repo = Path(repo).resolve()
     scan = Scan(repo)
+
+    def guarded(stage: str, p: Path, fn, *args):
+        """One hostile or odd file must not stop the scan, and must never read as clean."""
+        try:
+            fn(*args)
+        except Exception as e:  # noqa: BLE001
+            scan.error(rel(scan, p), stage, f"could not be processed safely ({type(e).__name__}); not analysed")
+
     for p in walk(repo, {"mcp.json"}):
-        scan_mcp(scan, p)
+        guarded("threat_analysis", p, scan_mcp, scan, p)
     for p in walk(repo, suffix=".json"):
         if p.parent.name == "agents" and p.parent.parent.name == ".kiro":
-            scan_agent(scan, p)
+            guarded("threat_analysis", p, scan_agent, scan, p)
     for p in walk(repo, {"SKILL.md"}):
-        scan_skl(scan, p.parent.name, rel(scan, p), p.read_text(errors="ignore"))
+        guarded("threat_analysis", p, lambda p=p: scan_skl(scan, p.parent.name, rel(scan, p), p.read_text(errors="ignore")))
     for p in walk(repo, {"package-lock.json"}):
-        scan_deps(scan, p, offline)
+        guarded("threat_analysis", p, scan_deps, scan, p, offline)
     for p in walk(repo):
         if re.fullmatch(r"requirements[\w.\-]*\.txt", p.name):
-            scan_deps(scan, p, offline)
+            guarded("threat_analysis", p, scan_deps, scan, p, offline)
     now = datetime.now(timezone.utc)
     env = environment or ("ci" if os.environ.get("GITHUB_ACTIONS") == "true" else "local")
     return {"repository": repo.name, "scan_id": now.strftime("scan-%Y%m%d-%H%M%S"), "environment": env,
@@ -357,6 +377,79 @@ def validate_scan(out: dict) -> list[str]:
     return bad
 
 
+# ---------------------------------------------------------------- suppressions (visible, reasoned, expiring)
+SUPPRESSION_MATCH_KEYS = ("rule_id", "type", "component", "source")
+SUPPRESSION_KEYS = set(SUPPRESSION_MATCH_KEYS) | {"reason", "expires"}
+
+
+def load_suppressions(path: Path) -> tuple[list[dict], list[dict]]:
+    """Read a suppressions file. Returns (valid entries, errors).
+
+    Suppressions only ever move a finding into the report's `suppressed` list; they never delete
+    it. Anything malformed is an error (so the scan exits 2) and that entry is NOT applied.
+    """
+    errors: list[dict] = []
+
+    def err(msg: str):
+        errors.append({"source": str(path), "stage": "suppressions", "message": msg})
+
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, ValueError) as e:
+        err(f"cannot read suppressions file: {e}")
+        return [], errors
+    entries = data.get("suppressions") if isinstance(data, dict) else None
+    if not isinstance(entries, list):
+        err('file must be {"suppressions": [ ... ]}')
+        return [], errors
+    good: list[dict] = []
+    for i, s in enumerate(entries):
+        tag = f"entry {i}"
+        if not isinstance(s, dict):
+            err(f"{tag}: must be an object")
+        elif set(s) - SUPPRESSION_KEYS:
+            err(f"{tag}: unknown key(s) {sorted(set(s) - SUPPRESSION_KEYS)}")
+        elif not isinstance(s.get("reason"), str) or not s["reason"].strip():
+            err(f"{tag}: a non-empty 'reason' is required")
+        elif not (s.get("rule_id") or s.get("type")) or not (s.get("component") or s.get("source")):
+            err(f"{tag}: too broad; give rule_id or type, AND component or source")
+        elif "expires" in s and not _valid_date(s["expires"]):
+            err(f"{tag}: 'expires' must be YYYY-MM-DD")
+        else:
+            good.append(s)
+    return good, errors
+
+
+def _valid_date(v) -> bool:
+    try:
+        date.fromisoformat(v)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _suppression_matches(s: dict, f: dict, today: date) -> bool:
+    if "expires" in s and date.fromisoformat(s["expires"]) < today:
+        return False  # expired: the finding comes back
+    return all(f.get(k) == s[k] for k in SUPPRESSION_MATCH_KEYS if k in s)
+
+
+def apply_suppressions(out: dict, suppressions: list[dict], today: date | None = None) -> dict:
+    """Move matching findings from `findings` to `suppressed` (with the reason). Nothing is dropped."""
+    today = today or date.today()
+    kept, hidden = [], []
+    for f in out.get("findings", []):
+        hit = next((s for s in suppressions if _suppression_matches(s, f, today)), None)
+        if hit:
+            hidden.append({**f, "suppressed_reason": hit["reason"]})
+        else:
+            kept.append(f)
+    out["findings"] = kept
+    if hidden:
+        out["suppressed"] = hidden
+    return out
+
+
 # ---------------------------------------------------------------- reports (all text is escaped: evidence is untrusted)
 def _text(v, limit: int = 200) -> str:
     if isinstance(v, (list, tuple)):
@@ -382,6 +475,8 @@ def _status(out: dict) -> tuple[str, str]:
         return "INCOMPLETE", "The scan did not finish cleanly, so this is NOT a clean result."
     if out.get("findings"):
         return "FINDINGS", f"{len(out['findings'])} finding(s) need attention."
+    if out.get("suppressed"):
+        return "CLEAN", f"No open findings; {len(out['suppressed'])} suppressed with recorded reasons (listed below)."
     return "CLEAN", "No findings."
 
 
@@ -412,6 +507,13 @@ def render_md(out: dict) -> str:
             L.append(f"| {_md(f.get('id'))} | {_md(f.get('severity'))} | {_md(f.get('type'))} | "
                      f"{_md(f.get('component'), 60)} | {_md(_detail(f), 60)} | {_md(f.get('source'), 80)} |")
         L.append("")
+    if out.get("suppressed"):
+        L += [f"### Suppressed ({len(out['suppressed'])}) — still reported, with the recorded reason", "",
+              "| ID | Rule | Source | Reason |", "|---|---|---|---|"]
+        for f in out["suppressed"]:
+            L.append(f"| {_md(f.get('id'))} | {_md(f.get('rule_id') or f.get('type'))} | "
+                     f"{_md(f.get('source'), 80)} | {_md(f.get('suppressed_reason'), 200)} |")
+        L.append("")
     return "\n".join(L)
 
 
@@ -435,6 +537,12 @@ def render_html(out: dict) -> str:
         f"<td>{e(f.get('type'))}</td><td>{e(f.get('component'), 80)}</td><td>{e(_detail(f), 80)}</td>"
         f"<td>{e(f.get('source'), 100)}</td><td>{e(f.get('evidence'), 160)}</td></tr>" for f in _sorted(out))
     errs = "".join(f"<li>{e(x.get('source'))} ({e(x.get('stage'))}): {e(x.get('message'))}</li>" for x in out.get("errors", []))
+    sup_rows = "".join(
+        f"<tr><td>{e(f.get('id'))}</td><td>{e(f.get('rule_id') or f.get('type'))}</td><td>{e(f.get('source'), 100)}</td>"
+        f"<td>{e(f.get('suppressed_reason'), 200)}</td></tr>" for f in out.get("suppressed", []))
+    sup_html = (f"<h2>Suppressed ({len(out['suppressed'])}) — still reported, with the recorded reason</h2>"
+                f"<table><thead><tr><th>ID</th><th>Rule</th><th>Source</th><th>Reason</th></tr></thead>"
+                f"<tbody>{sup_rows}</tbody></table>") if sup_rows else ""
     err_html = f'<h2>Scan errors</h2><ul class="err">{errs}</ul>' if errs else ""
     cards = "".join(f"<div class=\"card\"><span class=\"{s}\">{s.title()}</span><b>{c[s]}</b></div>" for s in c)
     table = ("<table><thead><tr><th>ID</th><th>Severity</th><th>Type</th><th>Component</th><th>Detail</th>"
@@ -446,7 +554,7 @@ def render_html(out: dict) -> str:
             f"<div class=\"sub\">{e(out.get('repository'))} · <span class=\"pill\">{e(out.get('environment'))}</span> · "
             f"{e(out.get('scan_id'))} · scanner {e(out.get('scanner_version', ''))}</div>"
             f"<div class=\"banner {label}\">{label}: {e(msg)}</div><div class=\"cards\">{cards}</div>"
-            f"{err_html}{table}"
+            f"{err_html}{table}{sup_html}"
             f"<footer>Secure locally. Verify continuously. Ship confidently.</footer></main></body></html>")
 
 
@@ -461,9 +569,15 @@ def main() -> int:
                     help="lowest severity that makes the exit code 1 (default: low = any finding)")
     ap.add_argument("--environment", choices=("local", "ci"), help="default: ci when GITHUB_ACTIONS=true")
     ap.add_argument("--out-dir", help="also write findings.json, summary.md and report.html here")
+    ap.add_argument("--suppressions", help="JSON file of reasoned, expiring suppressions (never auto-discovered: "
+                    "in CI read it from a trusted ref, not from the PR being scanned)")
     a = ap.parse_args()
 
     out = run_scan(Path(a.repo), a.offline, a.environment)
+    if a.suppressions:
+        supps, serrs = load_suppressions(Path(a.suppressions))
+        out["errors"].extend(serrs)
+        apply_suppressions(out, supps)
     problems = validate_scan(out)
     if problems:  # a malformed scan object is a scanner bug: surface it, never pass it on as valid
         out["errors"].append({"source": "scanner", "stage": "validation", "message": "; ".join(problems[:5])})
@@ -482,5 +596,14 @@ def main() -> int:
     return exit_code(out, a.fail_on)
 
 
+def cli() -> int:
+    """Entry point. Anything unexpected exits 2: it must never look like "findings" (1) or "clean" (0)."""
+    try:
+        return main()
+    except Exception as e:  # noqa: BLE001
+        print(f"sg_scan: internal error: {type(e).__name__}: {e}", file=sys.stderr)
+        return 2
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(cli())
