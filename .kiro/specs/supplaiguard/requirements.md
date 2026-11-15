@@ -321,7 +321,7 @@ Phase 2 changed two Phase 1 assumptions, recorded here so the spec stays honest:
 ### Requirement 18 — Kiroween 2026 Readiness
 
 Source: `../notes/kiroween/{kiroween.md,rules.md,resources.txt}` (verified against the 2026 pages).
-Deadline: **Fri Dec 4, 2026, 2:00 PM PT**. Credits request: by Dec 1 (4,000 credits, ID check); redeem by Dec 4.
+Deadline: **Fri Dec 4, 2026, 2:00 PM PT**. Free Kiro credits are available to participants, but the author has decided NOT to request them.
 Target category: **Frankenstein** (security scanner + LLM agents + CI + a self-evolving Crew loop). Bonus targets: **Best Kiro Crew App**, **Best Demo**, **Bonus Blog**, **Social Blitz**.
 
 1. **New work only.** Everything submitted SHALL be created on/after Oct 30, 2026. Any pre-existing code or work SHALL be disclosed in the README. (Repo history starts Nov 2026; keep commits from the start so this is provable.)

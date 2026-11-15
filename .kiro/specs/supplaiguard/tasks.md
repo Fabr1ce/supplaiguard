@@ -151,7 +151,7 @@ submittable product exists at the end of each block (cut from the bottom if time
   - [ ] 26.3 Create the repo (public, same GitHub account, new during the period) with README
 
 ### Block D — Submission
-- [ ] 27. Request Kiro credits (**by Dec 1**, ID check) — user action
+- [-] 27. Kiro credits: not requesting them (user decision). Budget implication: any headless Kiro use in CI or live agent runs draws on the author's own plan, so keep those runs small and keep the deterministic scanner as the default gate
 - [ ] 28. Kiro-usage write-up: IDE vs CLI vs Web vs Crew, agents, hooks, specs vs vibe, steering, MCP, PBT, powers _(R18.5)_
 - [ ] 29. Demo video script + recording ≤ 3:00, uploaded public to YouTube _(R18.4)_
 - [ ] 30. Blog post and `#KiroweenHackathon26` social post, URLs in the form _(R18.10)_
@@ -164,4 +164,4 @@ submittable product exists at the end of each block (cut from the bottom if time
 - **Sharing pattern:** everything lives under the `Fabr1ce` account (shared `supplaiguard` repo, a consumer demo repo, later `supplaiguard-crew`). The consumer calls the shared workflow via `uses: Fabr1ce/supplaiguard/.github/workflows/scan.yml@<sha>`.
 - **No `KIRO_API_KEY`** in this environment yet; needed for the headless CI job (task 20.6) and must be stored as a repo secret, never committed.
 - **Push access:** remote is SSH, no SSH key here; `gh` is authenticated over HTTPS (scopes: repo, workflow, read:org).
-- **Credits:** headless CI runs consume Kiro credits; keep triage runs small.
+- **Credits:** headless CI runs consume the author's own Kiro credits (no hackathon credits will be requested); keep triage runs small and off by default.
