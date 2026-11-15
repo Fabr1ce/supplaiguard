@@ -54,7 +54,7 @@ schema → agents → coordinator → hooks → demo repo → end-to-end verific
   - [x] 6.2 Write its prompt tying together dependency scan (OSV) and AI-component scan (rules), emitting schema-conformant findings _(R2.2, R3.6, R4.7)_
 
 - [x] 7. Author the Remediation agent
-  - [x] 7.1 Create `.kiro/agents/supplaiguard-remediation.json` with `tools: ["read","write","shell"]`, `fs_write.allowedPaths` scoped to manifests/config, `deniedPaths` on secret/prod paths (writes still prompt by default) _(R5.3, R9.2)_
+  - [x] 7.1 Create `.kiro/agents/supplaiguard-remediation.json` with `tools: ["read","write","shell"]`, `fs_write.allowedPaths` scoped to manifests/config, `deniedPaths` on secret/prod paths (writes still prompt by default) _(R5.3, R9.2)_. **Correction (2026-11-13):** `kiro-cli agent upgrade` had turned these write paths into `allow` rules, i.e. silent writes, and `npm install`/`npm ci` into silent allows. Both are now `ask`, `gh pr merge` is denied, and `scanner/tests/test_agent_policy.py` enforces the policy on every agent config
   - [x] 7.2 Write its prompt enforcing forward-only bumps, no merge, before/after capture, high-impact approval _(R5.1, R5.2, R5.4, R5.5, R5.6, R5.7)_
 
 - [x] 8. Author the Verification agent

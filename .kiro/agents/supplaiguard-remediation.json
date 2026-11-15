@@ -60,8 +60,6 @@
       {
         "capability": "shell",
         "match": [
-          "npm install *",
-          "npm ci",
           "curl -s https://api.osv.dev/*",
           "echo *",
           "jq *"
@@ -71,12 +69,21 @@
       {
         "capability": "shell",
         "match": [
+          "npm install *",
+          "npm ci"
+        ],
+        "effect": "ask"
+      },
+      {
+        "capability": "shell",
+        "match": [
           "rm *",
           "sudo *",
           "git push *",
           "git merge *",
           "bash *",
-          "sh *"
+          "sh *",
+          "gh pr merge *"
         ],
         "effect": "deny"
       },
@@ -89,7 +96,7 @@
           "**/.kiro/settings/mcp.json",
           ".kiro/agents/**"
         ],
-        "effect": "allow"
+        "effect": "ask"
       },
       {
         "capability": "fs_write",

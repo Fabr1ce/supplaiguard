@@ -28,33 +28,6 @@ traditional dependency scanners, it analyzes AI-specific components such as MCP 
 configurations, agent definitions, and agent tool permissions that
 deterministic tools miss.
 
-## Run it in CI (GitHub Actions)
-
-Any repository can call the shared, reusable workflow. Copy `examples/consumer-workflow.yml`, and pin
-**both** the `uses:` line and `sg-ref` to the same full commit SHA (branches and tags are rejected on
-purpose: a tool that flags unpinned remote dependencies must not be one).
-
-```yaml
-jobs:
-  supplaiguard:
-    permissions:
-      contents: read
-    uses: Fabr1ce/supplaiguard/.github/workflows/scan.yml@<FULL_COMMIT_SHA>
-    with:
-      sg-ref: <FULL_COMMIT_SHA>
-      fail-on: high
-```
-
-- **No secrets needed.** The deterministic scan never runs code from the repository it scans.
-- **Gate:** exit 1 means findings at or above `fail-on`; exit 2 means the scan could not finish, which
-  is never treated as clean. Results go to the job summary and a downloadable HTML report.
-- **Suppressions** come from the pull request's *base* commit, so a PR cannot hide its own findings.
-- **Dependabot PRs** are scanned like any other PR, so the result describes the dependencies after the update.
-- **Agent triage** (Kiro CLI headless) is experimental, off by default and not yet tested with a real key.
-  It runs in an empty directory with read-only tools, because headless Kiro loads the workspace's agents,
-  steering and MCP config without a trust prompt.
-- This repository scans its own `.kiro/` with the same workflow (`.github/workflows/self-scan.yml`).
-
 ## Why AI agents (and not just another scanner)?
 
 Traditional supply-chain tools (Dependabot, `npm audit`, Snyk, GHAS) are deterministic and
@@ -98,6 +71,71 @@ SupplAIGuard is built *with* Kiro and *on* Kiro, and each Kiro feature maps to a
 
 Kiro Powers aren't used yet. This is our reading of why the pieces fit together, not a
 benchmark against other coding agents.
+
+## How it works
+
+Every run is the same loop: **Discover, Analyze, Remediate, Verify, Learn**. The deterministic scanner
+does the exact checks, Kiro agents do the reasoning and the fixing, and you decide what changes.
+
+```mermaid
+flowchart LR
+    you(["You run the coordinator"])
+    save(["You save a manifest<br/>or agent config"])
+
+    d["1 Discover<br/>Discovery agent"]
+    a["2 Analyze<br/>Threat Analysis agent"]
+    ok{{"YOU approve<br/>every file write"}}
+    r["3 Remediate<br/>Remediation agent"]
+    v["4 Verify<br/>Verification agent<br/>PASS, FAIL or NEEDS_REVIEW"]
+    l["5 Learn<br/>planned"]
+    scan[["Deterministic scanner<br/>rules + OSV.dev"]]
+    rev["Reviewer agent<br/>different model, read-only"]
+
+    you --> d
+    save -.->|"hook: analyze on save"| d
+    d --> a
+    a --> ok
+    ok -->|"approved"| r
+    r -->|"hook: verify after a write"| v
+    v --> l
+    l -.->|"back to Discover"| d
+    a --- scan
+    v --- scan
+    v -.->|"hook: task finished"| rev
+
+    classDef human fill:#ffe9a8,stroke:#d49a00,color:#222,stroke-width:2px
+    classDef planned fill:#f1f1f1,stroke:#999,color:#444,stroke-dasharray:5 4
+    classDef core fill:#dff5e1,stroke:#3a9d4f,color:#222
+    classDef agent fill:#fff,stroke:#333,color:#222
+    class ok human
+    class l planned
+    class scan core
+    class d,a,r,v,rev agent
+```
+
+<sub>Yellow is a human decision. Green is deterministic code. Dashed grey is planned. Hooks sit on the arrows they fire on.</sub>
+
+### Where each Kiro feature is used
+
+| Kiro feature | Where | What it does here |
+|---|---|---|
+| **Custom agents** | `.kiro/agents/` | Six agents, each with its own permissions: coordinator, discovery, threat analysis, remediation, verification, and a reviewer that runs on a different model. Only remediation can write. |
+| **Skills** | `.kiro/skills/` | The procedures the agents follow: `sg-npm-inventory` (Discover), `sg-osv-dependency-scan` and `sg-ai-component-rules` (Analyze), `sg-remediation` (Remediate), `sg-verification` (Verify), `sg-findings-schema` (the shared output format). |
+| **Steering** | `.kiro/steering/` | Always-on rules every agent follows: the security policy, severity and confidence scoring, and the rule catalog. |
+| **Hooks** | `.kiro/hooks/` | Analyze when a manifest or agent config is saved; verify after a write; have the reviewer agent check each finished task. |
+| **Headless CLI** | CI, experimental | Optional triage of the findings in an empty directory with read-only tools (off by default). |
+| **Kiro GitHub app, Kiro Crew** | planned | The app to address review comments on fix PRs; a Crew steward to triage what CI learns. |
+
+### Where you stay in control
+
+1. **Every file write asks you first.** The Remediation agent can only edit manifests and agent or MCP config, each edit prompts you, and secret files are denied outright. Dependency installs prompt too, because install scripts run code.
+2. **High-impact changes need your explicit approval:** major version bumps, MCP command changes and permission changes.
+3. **Nothing is "resolved" because a file changed.** A finding is resolved only when the Verification agent's re-scan no longer reports it.
+4. **Nothing merges itself.** No agent may push or merge, and in CI a fix goes to its own branch and a pull request for you to merge.
+5. **A failed scan is never a clean scan.** If anything cannot be checked, the result is INCOMPLETE (exit code 2).
+
+> Status: the scanner, the CI scan and the agent permissions are tested (the permissions have their own
+> tests). The full live coordinator run and the Stop-review hook are not exercised yet.
 
 ## Quick start
 
@@ -160,6 +198,68 @@ Re-run `./install.sh` after editing anything under `.kiro/`. Remove everything w
 > Status: the scanner and the global install are working. Wiring the scanner into the
 > agents' analysis step, the GitHub Actions workflow and the CI evolution loop are in
 > progress; see `.kiro/specs/supplaiguard/tasks.md`.
+
+## Run it in CI (GitHub Actions)
+
+Any repository can call the shared, reusable workflow. Copy `examples/consumer-workflow.yml`, and pin
+**both** the `uses:` line and `sg-ref` to the same full commit SHA (branches and tags are rejected on
+purpose: a tool that flags unpinned remote dependencies must not be one).
+
+```yaml
+jobs:
+  supplaiguard:
+    permissions:
+      contents: read
+    uses: Fabr1ce/supplaiguard/.github/workflows/scan.yml@<FULL_COMMIT_SHA>
+    with:
+      sg-ref: <FULL_COMMIT_SHA>
+      fail-on: high
+```
+
+- **No secrets needed.** The deterministic scan never runs code from the repository it scans.
+- **Gate:** exit 1 means findings at or above `fail-on`; exit 2 means the scan could not finish, which
+  is never treated as clean. Results go to the job summary and a downloadable HTML report.
+- **Suppressions** come from the pull request's *base* commit, so a PR cannot hide its own findings.
+- **Dependabot PRs** are scanned like any other PR, so the result describes the dependencies after the update.
+- **Agent triage** (Kiro CLI headless) is experimental, off by default and not yet tested with a real key.
+  It runs in an empty directory with read-only tools, because headless Kiro loads the workspace's agents,
+  steering and MCP config without a trust prompt.
+- This repository scans its own `.kiro/` with the same workflow (`.github/workflows/self-scan.yml`).
+
+```mermaid
+flowchart LR
+    pr(["Pull request or<br/>Dependabot update"])
+    wf["Reusable workflow scan.yml<br/>pinned to a full commit SHA"]
+
+    subgraph ci["GitHub Actions"]
+        sc["Deterministic scanner<br/>no secrets, never runs repo code<br/>suppressions read from the base commit"]
+        gate{"Gate<br/>0 pass, 1 findings,<br/>2 scan incomplete"}
+        tri["Agent triage, experimental, off by default<br/>Kiro CLI headless in an empty directory<br/>read-only tools, deny rules"]
+        fix["Fix PR on its own branch<br/>re-scanned before it opens<br/>planned"]
+        evo["Sanitized report<br/>rule ids, counts, outcomes only<br/>opt-in, planned"]
+    end
+
+    sum(["Job summary and HTML report"])
+    human{{"A human reviews and merges<br/>nothing auto-merges<br/>Kiro GitHub app can fix review comments, planned"}}
+    maint{{"Maintainer reviews<br/>Kiro Crew steward triages, planned"}}
+    rules["Better rules and skills<br/>shipped as a new pinned SHA"]
+
+    pr --> wf --> sc --> gate
+    sc -.-> tri
+    gate --> sum
+    gate -->|"fix available"| fix --> human
+    gate -->|"opt-in"| evo --> maint --> rules
+    rules -.->|"consumers choose when to bump the pin"| wf
+
+    classDef human fill:#ffe9a8,stroke:#d49a00,color:#222,stroke-width:2px
+    classDef planned fill:#f1f1f1,stroke:#999,color:#444,stroke-dasharray:5 4
+    classDef core fill:#dff5e1,stroke:#3a9d4f,color:#222
+    classDef exp fill:#ffe8d6,stroke:#e07b39,color:#222,stroke-dasharray:5 4
+    class human,maint human
+    class fix,evo,rules planned
+    class sc,gate,wf core
+    class tri exp
+```
 
 ## Phase 1 (this MVP): Kiro-native
 
