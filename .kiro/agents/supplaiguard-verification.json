@@ -16,7 +16,9 @@
         "curl -s https://api\\.osv\\.dev/.*",
         "curl -s -X POST -d @- https://api\\.osv\\.dev/.*",
         "echo .*",
-        "jq .*"
+        "jq .*",
+        "git branch --show-current",
+        "git rev-parse --short HEAD"
       ],
       "deniedCommands": [
         "rm .*",
@@ -53,7 +55,9 @@
           "curl -s https://api.osv.dev/*",
           "curl -s -X POST -d @- https://api.osv.dev/*",
           "echo *",
-          "jq *"
+          "jq *",
+          "git branch --show-current",
+          "git rev-parse --short HEAD"
         ],
         "effect": "allow"
       },

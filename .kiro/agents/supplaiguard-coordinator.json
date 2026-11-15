@@ -55,6 +55,21 @@
         "effect": "allow"
       },
       {
+        "capability": "shell",
+        "match": [
+          "git merge *",
+          "gh pr merge *",
+          "git push *--force*",
+          "git push -f*",
+          "git push * -f*",
+          "git push *+*",
+          "git push *:*",
+          "git push * main*",
+          "git push * master*"
+        ],
+        "effect": "deny"
+      },
+      {
         "capability": "fs_read",
         "effect": "allow"
       },

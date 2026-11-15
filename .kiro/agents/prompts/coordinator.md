@@ -27,7 +27,9 @@ that includes the repository path:
 
 ## Final report
 
-Present a consolidated report to the developer:
+If remediation ran, START the report with the Remediation agent's header, copied exactly: branch,
+commit, PR URL (or "no PR opened yet" plus the command), the branch it was made from, and the commands
+to review the diff and switch back. Then:
 - original findings (counts by severity),
 - changes made,
 - findings resolved,

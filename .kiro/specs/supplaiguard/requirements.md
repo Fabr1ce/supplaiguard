@@ -349,3 +349,59 @@ Found by property-based testing and by reviewing the self-scan; applies to local
 8. A malformed, unreadable or missing suppressions file SHALL hide nothing and SHALL make the scan exit 2.
 9. IN CI on a pull request, suppressions SHALL be read from the PR base commit, never from the PR head, so a PR cannot suppress its own findings.
 10. WHEN Kiro CLI runs headless in CI THEN it SHALL run in a directory that does not contain the scanned repository, because non-interactive runs load the workspace's agents, steering and MCP configuration without a trust prompt.
+
+### Requirement 20 — Local Remediation Lands on Its Own Branch and Is Reported (added 2026-11-15)
+
+**User story:** As a developer, when SupplAIGuard fixes something on my machine I want the fix on its own
+branch, and I want to be told exactly where it is, so I can review it as a pull request instead of finding
+unexplained edits in my working tree.
+
+Evidence: a live run by the author applied a correct fix (`minimist` 1.2.0 to 1.2.6) directly to the
+working tree of the branch that happened to be checked out, with no commit, no branch and no report of
+where the change was.
+
+#### Acceptance Criteria
+
+1. BEFORE writing any file THE Remediation agent SHALL check that the target is a git repository with no uncommitted changes (the Learn history file of R21 excepted). IF it is not a git repository, or the working tree has uncommitted changes, THEN it SHALL stop and ask the developer instead of mixing its edits with theirs.
+2. BEFORE writing THE agent SHALL create and switch to a new branch named `supplaiguard/fix-<scan_id>`, where `<scan_id>` is the scan's id. It SHALL NEVER write on the developer's current branch.
+3. AFTER the developer approves the edits THE agent SHALL commit them on that branch, staging only the files it changed, with a message that lists the finding ids it addresses.
+4. AFTER committing THE agent SHALL push that branch (`git push -u origin supplaiguard/fix-<scan_id>`) and open a PR with `gh pr create`. Each of these steps SHALL prompt the developer, who may decline either one. It SHALL NEVER merge (R5.4), never force-push, and never push to any other branch or refspec. _(Decision 2026-11-15: the developer chose agent-run push and PR, each with a prompt, over printing the commands.)_
+5. WHEN remediation finishes THE agent's report SHALL start with: the branch name, the commit id, the PR URL (or "no PR opened yet" with the command to open one), the branch the fix was made from, and the exact commands to review the diff and to switch back.
+6. THE Coordinator's final report SHALL repeat the branch, commit and PR from the Remediation agent, and the Verification agent SHALL state which branch and commit it verified.
+7. IF the developer declines the edits THEN the agent SHALL switch back to the original branch and delete the empty fix branch, so nothing is left behind.
+
+### Requirement 21 — Learn Stage, Local Part (added 2026-11-15)
+
+**User story:** As a developer, I want every verified run to leave a record that makes the next run
+smarter, and I want to know what is learned and where it is kept.
+
+Status before this requirement: Learn existed only as a plan (R17, CI evolution loop). Nothing was
+recorded locally, so a full local run "did no learning".
+
+#### Acceptance Criteria
+
+1. WHEN the Threat Analysis or Verification agent runs the scanner THE run SHALL be appended to a local history file, by default `.supplaiguard/history.jsonl` in the scanned repository: date, scanner version, scan id, phase (`analysis` or `verification`), branch and commit scanned, whether the scan was complete, and per finding only a stable key, `type`, `rule_id`, `component`, `severity` and a learn status: `new`, `remaining` (also in the previous complete record), `recurred` (absent from the previous complete record but resolved earlier), plus the list of findings `resolved` since the previous complete record.
+2. THE history SHALL use an allow-list of fields only. It SHALL NOT contain evidence strings, file paths, file contents, secret values or source code (same rule as R17.1). `component` is the package or config name already shown in every report, sanitised and length-limited.
+3. THE scanner SHALL provide `--history [FILE]` to write that record, and `--learn-report [FILE]` to summarise it: which rules fire most, findings that came back after being resolved, and findings that stay open across runs.
+4. IF a scan is incomplete (exit 2) THEN its record SHALL say so, SHALL list no `resolved` findings, and SHALL NOT be used as the baseline for the next record (no false all-clear, R14).
+5. A malformed history line SHALL NOT stop the scan or change its exit code. The line SHALL be skipped and the learn report SHALL say how many lines were skipped. History is advisory: it never changes findings, statuses in the scan object, or exit codes.
+6. WHEN the Threat Analysis agent starts AND a history file exists THEN it SHALL run `--learn-report` and say which findings recurred or stayed open, so the next run starts from what was learned.
+7. A recurring false positive SHALL be proposed to the developer as a suppression entry (R19.6). It SHALL NOT be added automatically.
+8. Nothing in Learn SHALL change rules or skills automatically. Sharing learned patterns upstream is the opt-in CI loop of R17, which remains planned.
+9. THE README and the agents' reports SHALL say plainly what Learn does today (local history and summary) and what is still planned (CI feedback loop, Crew steward).
+
+### Requirement 22 — Human-Readable Scanner Report (added 2026-11-15)
+
+**User story:** As a developer running the scanner in a terminal, I want a short report that tells me at a
+glance whether the scan passed and what to fix, without reading JSON.
+
+Recorded after the fact: this was implemented on 2026-11-15 test-first (property group P9) before this
+requirement was written. This entry brings it into the spec.
+
+#### Acceptance Criteria
+
+1. THE scanner SHALL provide `--format text`: a header with the result (PASS, FAIL or INCOMPLETE) and the reason, counts by severity, then one entry per finding ordered by severity with its id, rule, component, source, detail and fix, then scan errors and suppressed findings with their reasons.
+2. THE result line SHALL agree with the exit code: PASS only for exit 0, FAIL for exit 1, INCOMPLETE for exit 2. An incomplete scan SHALL never print PASS.
+3. THE default `--format auto` SHALL print the text report when stdout is a terminal and JSON otherwise, so agents, pipes and CI keep receiving JSON. `json`, `md` and `html` SHALL keep working unchanged.
+4. Untrusted text from scanned files SHALL be printed safely: ANSI escape sequences, other control characters, bidirectional-override characters and newlines SHALL be removed, and long values truncated.
+5. Colour SHALL be used only when stdout is a terminal and `NO_COLOR` is not set.

@@ -9,6 +9,9 @@ Follow the `sg-remediation` skill, the `security-policy.md` steering, and the
 
 ## What to do
 
+0. **Before any write**, follow "Git workflow" in `sg-remediation`: check the repo is clean, record the
+   start branch, and `git switch -c supplaiguard/fix-<scan_id>`. Stop and ask if the tree is dirty.
+
 For each finding with `remediation_available: true`:
 
 1. Compute the fix (dependency version bump to `recommended_version`, or the
@@ -20,6 +23,13 @@ For each finding with `remediation_available: true`:
 4. On approval, apply the edit (writes are restricted to manifests/config), then
    capture before/after and set the finding `status: remediated`.
 
+## After the edits
+
+5. Commit only the files you changed, then push the fix branch and open a PR (each step prompts; the
+   developer may decline). If every edit was declined, switch back and delete the empty fix branch.
+6. Never merge, force-push, amend, reset, rebase, or push any branch except `supplaiguard/fix-<scan_id>`.
+   Run git commands one at a time, with no `;`, `&&`, `||`, backticks or `$(` anywhere in them.
+
 ## Hard rules (security policy)
 
 - Never auto-merge. Never downgrade to a vulnerable version. Never introduce an
@@ -30,5 +40,6 @@ For each finding with `remediation_available: true`:
 
 ## Output
 
-A remediation record per fixed finding (see `sg-remediation`), plus the updated
-finding statuses. Hand these to the Verification agent.
+Start with the report header from `sg-remediation` (branch, commit, PR or the command to open one, start
+branch, review and go-back commands). Then a remediation record per fixed finding, plus the updated
+finding statuses. Hand these, with the branch and commit, to the Verification agent.

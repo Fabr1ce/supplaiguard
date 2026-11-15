@@ -597,3 +597,87 @@ a trust prompt. Therefore the optional `agent-triage` job never runs inside the 
 being scanned. It runs in an empty directory containing only `findings.json`, with `--trust-tools=read_file,grep_search`,
 user-level deny rules (`fs_read` on `/proc`, `/etc`, `~/.ssh`, `~/.aws`, `~/.config`; no shell; no writes),
 no run for fork PRs, advisory only (`continue-on-error`). Not yet exercised with a real API key.
+
+## Local remediation branch and PR (R20)
+
+Flow of the Remediation agent, all on the scanned repository:
+
+1. `git rev-parse --is-inside-work-tree` and `git status --porcelain`. Stop and ask if this isn't a repo, or if
+   any path other than `.supplaiguard/history.jsonl` is dirty.
+2. Record the starting branch (`git branch --show-current`), then `git switch -c supplaiguard/fix-<scan_id>`.
+3. Propose each edit and write it after approval (existing per-write `ask` rules).
+4. `git add <each changed file>` (never `-A` or `.`), then
+   `git commit -m "SupplAIGuard: fix <finding ids>"` with the finding ids and advisories in the body.
+5. `git push -u origin supplaiguard/fix-<scan_id>` and `gh pr create --base <start branch> --head supplaiguard/fix-<scan_id> --title ... --body ...`.
+   The body has the before/after table and says verification follows. The developer can decline either step.
+6. If every edit was declined: `git switch <start branch>` and `git branch -D supplaiguard/fix-<scan_id>`.
+7. Report header (R20.5): branch, commit (`git rev-parse --short HEAD`), PR URL or "no PR opened yet" with the
+   command, the starting branch, and the commands `git diff <start>...supplaiguard/fix-<scan_id>` and `git switch <start>`.
+
+Verification runs on the fix branch after the commit and reports the branch and commit it scanned. The
+Coordinator repeats the header from step 7 at the top of its final report.
+
+### Permissions (Remediation agent, Kiro CLI v3 rules)
+
+The most restrictive matching rule wins (deny > ask > allow), the same rule the Coordinator design relies on.
+
+| Effect | Shell patterns | Why |
+|---|---|---|
+| allow | exact strings only: `git status --porcelain`, `git rev-parse --is-inside-work-tree`, `git rev-parse --short HEAD`, `git branch --show-current` | Read-only git queries. No wildcard: `git status*` would also match `git status; rm -rf ~`. |
+| ask | `git switch -c supplaiguard/fix-*`, `git switch *`, `git add *`, `git commit -m *`, `git branch -D supplaiguard/fix-*`, `git push -u origin supplaiguard/fix-*`, `gh pr create *` | Every state change prompts. |
+| deny | `git merge *`, `gh pr merge *`, `git push *--force*`, `git push -f*`, `git push * -f*`, `git push *+*`, `git push *:*`, `git push --all*`, `git push --mirror*`, `git push --delete*`, `git push * -d *`, `git push --tags*`, `git push * main*`, `git push * master*`, `git push origin HEAD*`, `git push -u origin supplaiguard/fix-* *` (a second refspec), `git branch -D * *`, `git commit *--amend*`, `git reset *`, `git rebase *`; chaining `*;*`, `*&&*`, `*\|\|*`, `` *`* ``, `*$(*`; plus the existing `rm`, `sudo`, `bash`, `sh` | Merging, force-pushing, refspec tricks, pushing protected branches and smuggling a second command stay impossible even if the developer clicks yes. Commit messages therefore avoid backticks and `$(`. |
+
+The push `ask` pattern only matches a `supplaiguard/fix-` branch, and any push matching a deny pattern is refused
+first. The legacy `toolsSettings.execute_bash` lists are kept in sync with these rules. The Coordinator gets the
+same merge and force-push deny rules, because a parent deny also applies to its sub-agents.
+
+Rejected alternative: print the push and PR commands for the developer to run. The developer chose agent-run
+steps with a prompt each (2026-11-15).
+
+Tests (`test_agent_policy.py`): the push of a fix branch asks; pushes to `main`/`master`, force pushes, `src:dst`
+refspecs, `--all`/`--mirror`/`--delete` and every merge are denied; no git state change is ever `allow`.
+
+## Learn, local part (R21)
+
+The scanner owns the deterministic part so it is testable. The agents only decide when to run it and how to
+explain the result.
+
+- `--history [FILE]` (default `<repo>/.supplaiguard/history.jsonl`) appends one JSON line after the scan:
+  `{"v":1, "date", "scanner_version", "scan_id", "phase", "branch", "commit", "complete", "findings":[...], "resolved":[...]}`.
+  `phase` comes from `--phase analysis|verification` (default `analysis`). `branch` and `commit` are read with
+  `git` if it's available, else `null`.
+- Finding entry: `{"key", "type", "rule_id", "component", "severity", "learn"}`. `key` is the first 16 hex chars of
+  sha256 of `type|rule_id|component`. `component` passes through the same sanitiser as the text report, limited to
+  120 chars. Nothing else from the finding is copied, so evidence, paths and messages can't leak (built by
+  allow-list, never by deleting fields).
+- `learn` status against the **last complete** record in the file: `remaining` if the key is in it, `recurred`
+  if not but the key appears in any earlier record's `resolved` list, otherwise `new`. `resolved` = keys in the
+  baseline that are absent now. An incomplete scan writes `"complete": false` and `"resolved": []`, and is
+  never used as a baseline.
+- Suppressed findings aren't recorded as findings, so suppressing something never shows up as "resolved".
+- `--learn-report [FILE]` prints a summary and exits 0 without scanning: runs and the date range, top rules
+  by count, recurred findings, and findings open in the last N complete records (N = 3), plus a count of skipped
+  malformed lines. Text by default, JSON with `--format json`.
+- History never changes the scan object, findings or exit code (R21.5). A write failure is reported on stderr
+  and the scan's exit code is unchanged.
+
+Agent wiring: Threat Analysis runs `--learn-report` first if the file exists, then the scan with `--history
+--phase analysis`. Verification runs the re-scan with `--history --phase verification`. The existing shell
+allow pattern for the scanner already covers both. Suggested suppressions for recurring false positives
+are shown to the developer and never written by these read-only agents (R21.7).
+
+Known gap: the scanner writes files when given `--history` or `--out-dir`, and the read-only agents can run
+the scanner. Those writes are limited to report files the agent names. A later task can restrict both flags
+to `.supplaiguard/` and the system temp dir.
+
+Property tests (P10): the serialised record never contains any finding's evidence, source or message; only
+allow-listed keys appear; an incomplete scan has an empty `resolved` list and is skipped as a baseline;
+`resolved` and `remaining` partition the baseline; a fix then reintroduction is reported as `recurred`; random
+garbage lines are skipped and counted, never raise.
+
+## Human-readable text report (R22)
+
+`render_text(out, fail_on, color, width)`. The result line uses `exit_code()` itself, so it can't disagree with
+the exit status. All untrusted values pass through `_term()` (removes ANSI/CSI sequences, C0/C1 controls,
+bidi overrides and newlines, then truncates). `--format auto` checks `sys.stdout.isatty()`. Colour needs a TTY
+and no `NO_COLOR`. Tests: property group P9 in `test_properties.py`.

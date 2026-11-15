@@ -15,3 +15,6 @@ assets/build_logo.py
 
 # NOTE: do NOT add .kiro or any path under it here.
 # The Kiroween 2026 rules require /.kiro to be committed; ignoring it can disqualify the submission.
+
+# SupplAIGuard Learn history (local, per developer)
+.supplaiguard/history.jsonl

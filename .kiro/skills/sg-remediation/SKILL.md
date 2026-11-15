@@ -59,9 +59,41 @@ Follow the security policy at all times.
 - After a successful write, set the finding `status` to `remediated` (NOT
   `resolved` — only Verification can resolve it).
 
+## Git workflow: every fix lands on its own branch (R20)
+
+Run each command on its own. Chaining (`;`, `&&`, `||`), backticks and `$(` are denied, so they must
+not appear in commit messages or PR titles and bodies either.
+
+1. **Check first, before any write.**
+   `git rev-parse --is-inside-work-tree`, then `git status --porcelain`. If this isn't a git repo, or any
+   path other than `.supplaiguard/history.jsonl` shows as changed, STOP and ask the developer
+   (commit or stash their work first). Never mix your edits with theirs.
+2. **Branch.** Record the start branch with `git branch --show-current`, then
+   `git switch -c supplaiguard/fix-<scan_id>`. Never write on the start branch.
+3. **Edit** as in the procedure above. Each write prompts.
+4. **If every edit was declined:** `git switch <start>`, then `git branch -D supplaiguard/fix-<scan_id>`.
+   Report that nothing changed and stop.
+5. **Commit.** `git add <path>` once per changed file (never `-A` or `.`), then
+   `git commit -m "SupplAIGuard: fix SG-001 SG-003" -m "lodash 4.17.4 to 4.18.0 (GHSA-...)"`.
+6. **Push and PR, each with a prompt; the developer may decline either.**
+   `git push -u origin supplaiguard/fix-<scan_id>`, then
+   `gh pr create --base <start> --head supplaiguard/fix-<scan_id> --title "SupplAIGuard: fix <ids>" --body "<plain text>"`.
+   The body lists each finding, from and to, the advisory or rule id, and the line "Verification follows. Do not merge before it passes."
+   NEVER merge, force-push, amend, reset, rebase, or push any other branch. If there is no `origin` remote
+   or `gh` isn't logged in, skip this step and say so.
+7. **Report header**, always first in your output:
+
+```
+Branch:      supplaiguard/fix-<scan_id>   (made from <start>)
+Commit:      <git rev-parse --short HEAD>
+PR:          <URL>  |  no PR opened yet: gh pr create --base <start> --head supplaiguard/fix-<scan_id>
+Review diff: git diff <start>...supplaiguard/fix-<scan_id>
+Go back:     git switch <start>
+```
+
 ## Output
 
-For each remediated finding, produce:
+Start with the report header above. Then, for each remediated finding, produce:
 
 ```json
 {

@@ -11,8 +11,11 @@ Follow `sg-verification` and `sg-findings-schema`.
 1. **Re-run the scanner** on the MODIFIED workspace, exactly as threat analysis did:
 
    ```
-   python3 ~/.kiro/supplaiguard/scanner/sg_scan.py <repo-path>
+   python3 ~/.kiro/supplaiguard/scanner/sg_scan.py <repo-path> --history --phase verification
    ```
+
+   `--history` appends this re-check to the Learn history, so the next run can tell a fix that
+   held from a finding that came back. It never changes the result or the exit code.
 
    Using the same scanner locally and in CI makes the before/after comparable. If the
    scanner is missing, fall back to `sg-osv-dependency-scan` and `sg-ai-component-rules`.
@@ -23,7 +26,10 @@ Follow `sg-verification` and `sg-findings-schema`.
    - scan error, or the component can no longer be evaluated → `NEEDS_REVIEW`.
 3. **Detect regressions**: any finding present now that was not in the original scan.
 4. Produce the before-and-after report (`original_findings`, `changes_made`, `resolved`,
-   `remaining`, `regressions`, `results`, `overall`).
+   `remaining`, `regressions`, `results`, `overall`). Its first line states what you verified:
+   `Verified: branch <git branch --show-current>, commit <git rev-parse --short HEAD>` (read-only
+   commands; run each on its own). If the branch isn't the `supplaiguard/fix-<scan_id>` branch the
+   Remediation agent reported, say so and set `overall` to `NEEDS_REVIEW`.
 
 ## Hard rules (security policy)
 
