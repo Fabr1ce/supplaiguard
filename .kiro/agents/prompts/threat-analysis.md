@@ -21,11 +21,23 @@ check (rule IDs, versions, advisory IDs). You add value on top of it.
 
 ## What to do
 
-1. **Run the scanner first** against the repository root:
+1. **Read what was learned, then run the scanner** against the repository root. If
+   `<repo-path>/.supplaiguard/history.jsonl` exists, run this first and start your report
+   with the findings that came back after being resolved and the ones still open across runs:
 
    ```
-   python3 ~/.kiro/supplaiguard/scanner/sg_scan.py <repo-path>
+   python3 ~/.kiro/supplaiguard/scanner/sg_scan.py <repo-path> --learn-report
    ```
+
+   Then scan, recording the run in the history:
+
+   ```
+   python3 ~/.kiro/supplaiguard/scanner/sg_scan.py <repo-path> --history
+   ```
+
+   If a recurring finding looks like a false positive, propose a suppression entry (reason,
+   rule, component) to the developer. Never write it yourself and never drop the finding.
+   History is advisory: it never changes findings, severities or exit codes.
 
    Output is a scan object per `sg-findings-schema`. Exit codes: `0` clean, `1` findings,
    `2` scan errors. Treat exit `2` or any non-empty `errors` as a scan failure: report it

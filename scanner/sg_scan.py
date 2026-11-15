@@ -7,19 +7,24 @@ emits the findings schema from the sg-findings-schema skill. Exact checks
 results are reproducible; the LLM agents are reserved for triage, semantic SKL
 review, and remediation.
 
-Usage: sg_scan.py [REPO] [--offline] [--pretty] [--format json|md|html]
+Usage: sg_scan.py [REPO] [--offline] [--pretty] [--format auto|text|json|md|html]
                   [--fail-on low|medium|high|critical] [--environment local|ci]
-                  [--out-dir DIR] [--suppressions FILE]
+                  [--out-dir DIR] [--suppressions FILE] [--history [FILE]] [--phase analysis|verification]
+       sg_scan.py [REPO] --learn-report [FILE] [--format text|json]
 Exit:  0 clean | 1 findings at/above --fail-on | 2 scan errors (never a false all-clear)
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import textwrap
 import urllib.request
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -558,20 +563,243 @@ def render_html(out: dict) -> str:
             f"<footer>Secure locally. Verify continuously. Ship confidently.</footer></main></body></html>")
 
 
+# ---------------------------------------------------------------- plain-text report for a person at a terminal
+# Everything from the scanned repository is untrusted: strip control codes (ANSI escapes can rewrite a
+# terminal), bidi overrides (can reorder text to deceive) and newlines (could forge a fake RESULT line).
+_TERM_BAD = re.compile(r"[\x00-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2066-\u2069]+")
+_SEV_COLOR = {"critical": "1;31", "high": "31", "medium": "33", "low": "36"}
+_VERDICT_COLOR = {"PASS": "1;32", "FAIL": "1;31", "INCOMPLETE": "1;35"}
+
+
+def _term(v, limit: int = 200) -> str:
+    if isinstance(v, (list, tuple)):
+        v = ", ".join(str(x) for x in v)
+    v = " ".join(_TERM_BAD.sub(" ", str(v if v is not None else "")).split())
+    return v[:limit] + ("\u2026" if len(v) > limit else "")
+
+
+def render_text(out: dict, fail_on: str = "low", color: bool = False, width: int = 100) -> str:
+    """Human-friendly report: verdict, counts, then every finding (most severe first)."""
+    def paint(text: str, code: str) -> str:
+        return f"\x1b[{code}m{text}\x1b[0m" if color else text
+
+    width = max(60, min(width, 140))
+    code = exit_code(out, fail_on)
+    verdict = {0: "PASS", 1: "FAIL", 2: "INCOMPLETE"}[code]
+    findings, errors, suppressed = _sorted(out), out.get("errors", []), out.get("suppressed", [])
+    counts = _counts(out)
+    deps = [f for f in findings if f.get("type") == "vulnerable_dependency"]
+    n_ai = len(findings) - len(deps)
+    threshold = "any severity" if fail_on == "low" else f"{fail_on} or higher"
+
+    def pl(n: int, word: str) -> str:
+        return f"{n} {word}" + ("" if n == 1 else "s")
+    at_or_above = sum(1 for f in findings if SEV_RANK.get(f.get("severity"), 0) >= SEV_RANK[fail_on])
+
+    def row(label: str, text: str, indent: int = 0) -> str:
+        prefix = " " * indent + f"{label:<10}"
+        return textwrap.fill(text, width=width, initial_indent=prefix, subsequent_indent=" " * len(prefix),
+                             break_long_words=True, break_on_hyphens=False)
+
+    if verdict == "PASS":
+        why = f"no findings meet the fail threshold: {threshold}"
+        if findings:
+            why += f"; {pl(len(findings), 'lower-severity finding')} listed below"
+    elif verdict == "FAIL":
+        why = f"{pl(at_or_above, 'finding')} meet the fail threshold: {threshold}"
+    else:
+        why = "the scan did not finish cleanly, so this is NOT a clean result"
+
+    L = [f"SupplAIGuard scan: {_term(out.get('repository'), 80)}  "
+         f"({_term(out.get('environment'), 10)}, {_term(out.get('scan_id'), 40)}, scanner {_term(out.get('scanner_version', '?'), 12)})",
+         "-" * min(width, 72),
+         f"RESULT    {paint(verdict, _VERDICT_COLOR[verdict])}  ({why})"]
+    if findings:
+        parts = ", ".join(paint(f"{counts[s]} {s}", _SEV_COLOR[s]) if counts[s] else f"{counts[s]} {s}"
+                          for s in ("critical", "high", "medium", "low"))
+        L.append(f"FINDINGS  {len(findings)} total: {parts}")
+        L.append(f"          {len(deps)} vulnerable {'dependency' if len(deps) == 1 else 'dependencies'}, "
+                 f"{pl(n_ai, 'AI-config issue')} (MCP servers, agent permissions, skills)")
+        fixable = sum(1 for f in findings if f.get("remediation_available") is True)
+        L.append(f"          {fixable} of {len(findings)} have a fix available")
+    else:
+        L.append("FINDINGS  No findings." if not suppressed else
+                 f"FINDINGS  No open findings ({len(suppressed)} suppressed, listed below).")
+    if suppressed and findings:
+        L.append(f"SUPPRESSED {pl(len(suppressed), 'reviewed false positive')}, listed below")
+    L.append(f"ERRORS    {pl(len(errors), 'scan error')}" if errors else "ERRORS    none")
+
+    if errors:
+        L += ["", "SCAN ERRORS (the result above cannot be trusted as clean)"]
+        for e in errors:
+            L.append(row("  !", f"{_term(e.get('source'), 60)} ({_term(e.get('stage'), 20)}): {_term(e.get('message'), 200)}"))
+    if findings:
+        L += ["", f"FINDINGS, most severe first ({len(findings)})"]
+        for i, f in enumerate(findings, 1):
+            sev = str(f.get("severity", "?"))
+            tag = paint(f"[{_term(sev, 8).upper()}]", _SEV_COLOR.get(sev, "0")) + " " * max(1, 11 - len(_term(sev, 8)) - 2)
+            if f.get("type") == "vulnerable_dependency":
+                fix = f.get("recommended_version")
+                title = (f"{_term(f.get('component'), 60)} {_term(f.get('current_version'), 20)}"
+                         + (f"  ->  {_term(fix, 20)}" if f.get("remediation_available") and fix else "  (no fixed version published)"))
+                fixtxt = f"upgrade to {_term(fix, 20)}" if f.get("remediation_available") and fix else "none available yet"
+            else:
+                title = f"{_term(f.get('rule_id'), 12)}  {_term(f.get('component'), 60)}"
+                fixtxt = ("change the configuration (the Remediation agent can propose the edit)"
+                          if f.get("remediation_available") else "no automatic fix")
+            L.append(f"{i:>3}. {tag} {_term(f.get('id'), 12)}  {title}")
+            L.append(row("where:", _term(f.get("source"), 120), 6))
+            L.append(row("why:", _term(f.get("description"), 240), 6))
+            L.append(row("evidence:", _term(f.get("evidence"), 160), 6))
+            L.append(row("fix:", fixtxt, 6))
+    if suppressed:
+        L += ["", f"SUPPRESSED ({len(suppressed)}): reviewed, still reported, with the recorded reason"]
+        for f in suppressed:
+            L.append(f"  ~ {_term(f.get('id'), 12)}  {_term(f.get('rule_id') or f.get('type'), 30)}  {_term(f.get('source'), 80)}")
+            L.append(row("reason:", _term(f.get("suppressed_reason"), 240), 6))
+    L += ["", paint("Other formats: --format json|md|html   Save all reports: --out-dir DIR   Threshold: --fail-on high", "2")]
+    return "\n".join(L)
+
+
+# ---------------------------------------------------------------- Learn: local history (R21)
+HISTORY_DEFAULT = ".supplaiguard/history.jsonl"
+STILL_OPEN_RUNS = 3
+
+
+def _learn_key(f: dict) -> str:
+    raw = "|".join(str(f.get(k) or "") for k in ("type", "rule_id", "component"))
+    return hashlib.sha256(raw.encode("utf-8", "replace")).hexdigest()[:16]
+
+
+def _valid_record(r) -> bool:
+    return (isinstance(r, dict) and r.get("v") == 1 and isinstance(r.get("complete"), bool)
+            and isinstance(r.get("findings"), list) and isinstance(r.get("resolved"), list)
+            and all(isinstance(f, dict) and isinstance(f.get("key"), str) for f in r["findings"])
+            and all(isinstance(k, str) for k in r["resolved"]))
+
+
+def history_record(out: dict, prior: list[dict], phase: str, branch, commit, today: str | None = None) -> dict:
+    """One allow-listed history line. Built field by field: nothing else from a finding can leak in."""
+    complete = not out.get("errors")
+    baseline = next((r for r in reversed(prior) if r.get("complete")), None)
+    base_keys = {f["key"] for f in baseline["findings"]} if baseline else set()
+    ever_resolved = {k for r in prior for k in r.get("resolved", [])}
+    findings, seen = [], set()
+    for f in out.get("findings", []):
+        if not isinstance(f, dict):
+            continue
+        key = _learn_key(f)
+        if key in seen:
+            continue
+        seen.add(key)
+        learn = "remaining" if key in base_keys else "recurred" if key in ever_resolved else "new"
+        findings.append({"key": key, "type": _term(f.get("type"), 40), "rule_id": _term(f.get("rule_id"), 20) or None,
+                         "component": _term(f.get("component"), 120), "severity": _term(f.get("severity"), 10),
+                         "learn": learn})
+    resolved = sorted(base_keys - seen) if complete and baseline else []
+    return {"v": 1, "date": today or date.today().isoformat(), "scanner_version": VERSION,
+            "scan_id": _term(out.get("scan_id"), 40), "phase": phase,
+            "branch": _term(branch, 120) if branch else None, "commit": _term(commit, 40) if commit else None,
+            "complete": complete, "findings": findings, "resolved": resolved}
+
+
+def read_history(path: Path) -> tuple[list[dict], int]:
+    """Valid records in order, plus how many non-blank lines were skipped. Never raises on bad content."""
+    if not path.is_file():
+        return [], 0
+    records, skipped = [], 0
+    for line in path.read_text(errors="replace").split("\n"):
+        if not line.strip():
+            continue
+        try:
+            r = json.loads(line)
+        except ValueError:
+            r = None
+        if _valid_record(r):
+            records.append(r)
+        else:
+            skipped += 1
+    return records, skipped
+
+
+def git_info(repo: Path) -> tuple[str | None, str | None]:
+    def git(*args):
+        try:
+            r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=10)
+            return r.stdout.strip() or None if r.returncode == 0 else None
+        except (OSError, subprocess.SubprocessError):
+            return None
+    return git("branch", "--show-current"), git("rev-parse", "--short", "HEAD")
+
+
+def learn_summary(records: list[dict], skipped: int, n: int = STILL_OPEN_RUNS) -> dict:
+    complete = [r for r in records if r.get("complete")]
+    rules: dict[str, int] = {}
+    info: dict[str, dict] = {}
+    for r in complete:
+        for f in r["findings"]:
+            rule = f.get("rule_id") or f.get("type") or "?"
+            rules[rule] = rules.get(rule, 0) + 1
+            info[f["key"]] = {k: f.get(k) for k in ("rule_id", "type", "component", "severity")}
+    recurred = sorted({f["key"] for r in records for f in r["findings"] if f.get("learn") == "recurred"})
+    last = complete[-n:]
+    still = sorted(set.intersection(*({f["key"] for f in r["findings"]} for r in last))) if len(last) >= n else []
+    dates = [r.get("date") for r in records if r.get("date")]
+    return {"runs": len(records), "complete_runs": len(complete), "first": min(dates, default=None),
+            "last": max(dates, default=None), "skipped_lines": skipped,
+            "top_rules": [[k, v] for k, v in sorted(rules.items(), key=lambda kv: (-kv[1], kv[0]))[:5]],
+            "recurred": [{"key": k, **info.get(k, {})} for k in recurred],
+            "still_open": [{"key": k, **info.get(k, {})} for k in still], "still_open_runs": n}
+
+
+def render_learn(s: dict) -> str:
+    def item(f):
+        return f"  - {_term(f.get('rule_id') or f.get('type'), 30)}  {_term(f.get('component'), 80)}  ({_term(f.get('severity'), 10)})"
+    L = [f"SupplAIGuard learn report: {s['runs']} runs ({s['complete_runs']} complete), "
+         f"{_term(s['first'], 10)} to {_term(s['last'], 10)}"]
+    if s["skipped_lines"]:
+        L.append(f"Skipped {s['skipped_lines']} malformed history line(s).")
+    L.append("Most frequent rules: " + (", ".join(f"{_term(k, 30)} x{v}" for k, v in s["top_rules"]) or "none"))
+    L.append(f"Came back after being resolved ({len(s['recurred'])}):")
+    L += [item(f) for f in s["recurred"]] or ["  none"]
+    L.append(f"Open in each of the last {s['still_open_runs']} complete runs ({len(s['still_open'])}):")
+    L += [item(f) for f in s["still_open"]] or ["  none" if s["complete_runs"] >= s["still_open_runs"]
+                                                else f"  not enough runs yet (need {s['still_open_runs']})"]
+    L.append("Learn is advisory: it never changes findings or exit codes. Recurring false positives can be "
+             "proposed as suppressions; nothing is suppressed automatically.")
+    return "\n".join(L)
+
+
 # ---------------------------------------------------------------- main
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("repo", nargs="?", default=".")
     ap.add_argument("--offline", action="store_true", help="skip OSV lookups (reported as an error)")
     ap.add_argument("--pretty", action="store_true", help="indent JSON output")
-    ap.add_argument("--format", choices=("json", "md", "html"), default="json", help="what to print to stdout")
+    ap.add_argument("--format", choices=("auto", "text", "json", "md", "html"), default="auto",
+                    help="what to print to stdout. auto (default): a readable report in a terminal, JSON when piped")
     ap.add_argument("--fail-on", choices=tuple(SEV_RANK), default="low",
                     help="lowest severity that makes the exit code 1 (default: low = any finding)")
     ap.add_argument("--environment", choices=("local", "ci"), help="default: ci when GITHUB_ACTIONS=true")
     ap.add_argument("--out-dir", help="also write findings.json, summary.md and report.html here")
     ap.add_argument("--suppressions", help="JSON file of reasoned, expiring suppressions (never auto-discovered: "
                     "in CI read it from a trusted ref, not from the PR being scanned)")
+    ap.add_argument("--history", nargs="?", const="", metavar="FILE",
+                    help=f"append an allow-listed record of this scan (default: REPO/{HISTORY_DEFAULT}); never changes the exit code")
+    ap.add_argument("--phase", choices=("analysis", "verification"), default="analysis",
+                    help="which lifecycle step this scan is, stored in the history record")
+    ap.add_argument("--learn-report", nargs="?", const="", metavar="FILE",
+                    help=f"summarise the history (default: REPO/{HISTORY_DEFAULT}) instead of scanning; exits 0")
     a = ap.parse_args()
+
+    if a.learn_report is not None:
+        path = Path(a.learn_report) if a.learn_report else Path(a.repo) / HISTORY_DEFAULT
+        if not path.is_file():
+            print(f"No history yet at {path}. Scans add to it with --history.")
+            return 0
+        summary = learn_summary(*read_history(path))
+        print(json.dumps(summary, indent=2) if a.format == "json" else render_learn(summary))
+        return 0
 
     out = run_scan(Path(a.repo), a.offline, a.environment)
     if a.suppressions:
@@ -581,15 +809,29 @@ def main() -> int:
     problems = validate_scan(out)
     if problems:  # a malformed scan object is a scanner bug: surface it, never pass it on as valid
         out["errors"].append({"source": "scanner", "stage": "validation", "message": "; ".join(problems[:5])})
+    if a.history is not None:
+        path = Path(a.history) if a.history else Path(a.repo) / HISTORY_DEFAULT
+        try:
+            prior, _ = read_history(path)
+            rec = history_record(out, prior, a.phase, *git_info(Path(a.repo)))
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a") as fh:
+                fh.write(json.dumps(rec, separators=(",", ":")) + "\n")
+        except OSError as e:  # advisory: the scan result and exit code stand (R21.5)
+            print(f"sg_scan: could not write history to {path}: {e}", file=sys.stderr)
     if a.out_dir:
         d = Path(a.out_dir)
         d.mkdir(parents=True, exist_ok=True)
         (d / "findings.json").write_text(json.dumps(out, indent=2))
         (d / "summary.md").write_text(render_md(out))
         (d / "report.html").write_text(render_html(out))
-    if a.format == "md":
+    fmt = a.format if a.format != "auto" else ("text" if sys.stdout.isatty() else "json")
+    if fmt == "text":
+        color = sys.stdout.isatty() and "NO_COLOR" not in os.environ
+        print(render_text(out, a.fail_on, color, shutil.get_terminal_size((100, 24)).columns))
+    elif fmt == "md":
         print(render_md(out))
-    elif a.format == "html":
+    elif fmt == "html":
         print(render_html(out))
     else:
         print(json.dumps(out, indent=2 if a.pretty else None))

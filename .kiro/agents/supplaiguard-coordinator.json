@@ -4,33 +4,12 @@
   "prompt": "file://./prompts/coordinator.md",
   "mcpServers": {},
   "tools": [
-    "delegate",
-    "read"
-  ],
-  "allowedTools": [
     "read",
-    "delegate"
+    "subagent/supplaiguard-discovery",
+    "subagent/supplaiguard-threat-analysis",
+    "subagent/supplaiguard-remediation",
+    "subagent/supplaiguard-verification"
   ],
-  "toolsSettings": {
-    "subagent": {
-      "availableAgents": [
-        "supplaiguard-discovery",
-        "supplaiguard-threat-analysis",
-        "supplaiguard-remediation",
-        "supplaiguard-verification"
-      ],
-      "trustedAgents": [
-        "supplaiguard-discovery",
-        "supplaiguard-threat-analysis",
-        "supplaiguard-verification"
-      ]
-    },
-    "fs_write": {
-      "deniedPaths": [
-        "**"
-      ]
-    }
-  },
   "resources": [
     "file://~/.kiro/supplaiguard/steering/security-policy.md",
     "file://~/.kiro/supplaiguard/skills/sg-findings-schema/SKILL.md"
@@ -43,9 +22,21 @@
       {
         "capability": "fs_write",
         "match": [
-          "**"
+          "**/.env",
+          "**/.env.*",
+          "**/*secret*",
+          "**/secrets/**",
+          "**/*.pem",
+          "**/*.key"
         ],
         "effect": "deny"
+      },
+      {
+        "capability": "fs_write",
+        "match": [
+          "**"
+        ],
+        "effect": "ask"
       },
       {
         "capability": "subagent",
@@ -55,6 +46,28 @@
           "supplaiguard-verification"
         ],
         "effect": "allow"
+      },
+      {
+        "capability": "shell",
+        "match": [
+          "python3 ~/.kiro/supplaiguard/scanner/sg_scan.py *"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "shell",
+        "match": [
+          "git merge *",
+          "gh pr merge *",
+          "git push *--force*",
+          "git push -f*",
+          "git push * -f*",
+          "git push *+*",
+          "git push *:*",
+          "git push * main*",
+          "git push * master*"
+        ],
+        "effect": "deny"
       },
       {
         "capability": "fs_read",

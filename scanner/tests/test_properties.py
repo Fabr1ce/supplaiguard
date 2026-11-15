@@ -341,3 +341,248 @@ def test_agent_config_without_a_name_field_is_still_scanned(tmp_path):
     out = sg_scan.run_scan(tmp_path, offline=True)
     rules = {f["rule_id"] for f in out["findings"] if f["component"] == "sneaky"}
     assert "AGT-001" in rules, "an over-privileged agent must be found even without a name field"
+
+
+# ---------------------------------------------------------------- P9: the human-readable terminal report
+import re as _re  # noqa: E402
+import subprocess  # noqa: E402
+
+SCANNER = Path(__file__).resolve().parents[1] / "sg_scan.py"
+SEVERITIES = ["low", "medium", "high", "critical"]
+
+
+def scan_obj(sevs, errors=0, **extra):
+    findings = [{**fake_finding(i), "severity": s} for i, s in enumerate(sevs, 1)]
+    return {"repository": "r", "scan_id": "s", "environment": "local", "generated_at": "t",
+            "scanner_version": "x", "findings": findings, "errors": [{"source": "osv.dev", "stage": "x", "message": "down"}] * errors,
+            **extra}
+
+
+@FAST
+@given(sev=st.lists(st.sampled_from(SEVERITIES), max_size=7), errors=st.integers(0, 2),
+       fail_on=st.sampled_from(SEVERITIES))
+def test_text_report_verdict_always_matches_the_exit_code(sev, errors, fail_on):
+    out = scan_obj(sev, errors)
+    text = sg_scan.render_text(out, fail_on)
+    verdict = {0: "PASS", 1: "FAIL", 2: "INCOMPLETE"}[sg_scan.exit_code(out, fail_on)]
+    result_lines = [ln for ln in text.splitlines() if ln.startswith("RESULT")]
+    assert len(result_lines) == 1 and verdict in result_lines[0], (verdict, result_lines)
+    if errors:
+        assert "PASS" not in result_lines[0], "an incomplete scan must never read as a pass"
+
+
+@FAST
+@given(sev=st.lists(st.sampled_from(SEVERITIES), max_size=7))
+def test_text_report_shows_the_count_and_lists_every_finding(sev):
+    out = scan_obj(sev)
+    text = sg_scan.render_text(out)
+    assert (f"{len(sev)} total" in text) if sev else ("No findings" in text)
+    for f in out["findings"]:
+        assert text.count(f["id"]) == 1, f"{f['id']} must be listed exactly once"
+
+
+HOSTILE = st.sampled_from([
+    "\x1b[2J\x1b[Hfake screen", "\x1b]0;owned\x07", "a\nRESULT   PASS (forged)", "a\r\nRESULT   PASS",
+    "\u202eevil\u202c", "\x9b31m", "x" * 5000, "\x00\x07\x08",
+])
+
+
+@FAST
+@given(evidence=HOSTILE, comp=HOSTILE, desc=HOSTILE, color=st.booleans())
+def test_text_report_cannot_be_used_to_inject_terminal_codes_or_fake_lines(evidence, comp, desc, color):
+    f = {**fake_finding(1), "component": comp, "evidence": evidence, "description": desc, "source": comp}
+    out = {**scan_obj([]), "findings": [f]}
+    text = sg_scan.render_text(out, color=color)
+    own_escapes = _re.findall(r"\x1b\[[0-9;]*m", text) if color else []
+    stripped = text
+    for e in set(own_escapes):
+        stripped = stripped.replace(e, "")
+    assert "\x1b" not in stripped and "\x9b" not in stripped and "\x07" not in text, "no attacker escape sequences"
+    assert not _re.search(r"[\u202a-\u202e\u2066-\u2069]", text), "no bidi overrides"
+    assert len([ln for ln in text.splitlines() if ln.startswith("RESULT")]) == 1, "a hostile string must not forge a RESULT line"
+    assert max(len(ln) for ln in text.splitlines()) < 400, "hostile length must be truncated"
+
+
+def test_no_color_codes_unless_asked():
+    assert "\x1b" not in sg_scan.render_text(scan_obj(["high"]))
+    assert "\x1b[" in sg_scan.render_text(scan_obj(["high"]), color=True)
+
+
+def test_text_report_lists_dependency_fixes_clearly():
+    dep = {"id": "SG-001", "type": "vulnerable_dependency", "component": "lodash", "current_version": "4.17.4",
+           "recommended_version": "4.18.0", "severity": "critical", "confidence": "high", "source": "package-lock.json",
+           "evidence": ["GHSA-aaaa", "GHSA-bbbb"], "description": "2 known advisories affect lodash@4.17.4.",
+           "remediation_available": True, "status": "open"}
+    text = sg_scan.render_text({**scan_obj([]), "findings": [dep]})
+    assert "lodash" in text and "4.17.4" in text and "4.18.0" in text and "GHSA-aaaa" in text
+    assert "1 vulnerable dependenc" in text
+
+
+def test_text_report_shows_suppressed_findings_and_errors():
+    out = sg_scan.apply_suppressions(scan_obj(["high"], errors=1),
+                                     [{"rule_id": "SKL-002", "source": "s1.md", "reason": "docs quote the phrase"}])
+    text = sg_scan.render_text(out)
+    assert "SUPPRESSED" in text and "docs quote the phrase" in text and "down" in text and "INCOMPLETE" in text
+
+
+def run_cli(tmp_path, *args):
+    write(tmp_path, ".kiro/settings/mcp.json", json.dumps({"mcpServers": {"s": {"autoApprove": ["*"]}}}))
+    return subprocess.run([sys.executable, str(SCANNER), str(tmp_path), "--offline", *args],
+                          capture_output=True, text=True, timeout=60)
+
+
+def test_piped_default_stays_json_so_agents_and_scripts_keep_working(tmp_path):
+    r = run_cli(tmp_path)  # stdout is a pipe here, not a terminal
+    assert json.loads(r.stdout)["findings"], "machine-readable by default when not a terminal"
+
+
+@pytest.mark.parametrize("fmt,marker", [("text", "RESULT"), ("md", "## SupplAIGuard scan"),
+                                        ("html", "<!doctype html>"), ("json", '"findings"')])
+def test_every_output_format_still_works_with_the_same_exit_code(tmp_path, fmt, marker):
+    r = run_cli(tmp_path, "--format", fmt)
+    # no dependency files, so offline mode records no error: the one MCP finding means exit code 1
+    assert marker in r.stdout and r.returncode == 1
+
+
+def test_text_format_exit_code_follows_fail_on(tmp_path):
+    write(tmp_path, ".kiro/agents/a.json", json.dumps({"name": "a", "tools": ["*"]}))
+    r = subprocess.run([sys.executable, str(SCANNER), str(tmp_path), "--format", "text", "--fail-on", "critical"],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0 and "PASS" in r.stdout, r.stdout
+
+
+# ---------------------------------------------------------------- P10: Learn history (R21)
+RECORD_KEYS = {"v", "date", "scanner_version", "scan_id", "phase", "branch", "commit", "complete", "findings", "resolved"}
+FINDING_KEYS = {"key", "type", "rule_id", "component", "severity", "learn"}
+SECRETISH = st.text(min_size=1, max_size=40).map(lambda s: "ZQXLEAK" + s)
+
+
+def hist(findings, errors=0, scan_id="s"):
+    return {**scan_obj([], errors), "scan_id": scan_id, "findings": findings}
+
+
+def record(out, prior=(), phase="analysis"):
+    return sg_scan.history_record(out, list(prior), phase=phase, branch="b", commit="c", today="2026-11-15")
+
+
+@FAST
+@given(evidence=SECRETISH, source=SECRETISH, desc=SECRETISH, n=st.integers(1, 4))
+def test_history_never_contains_evidence_paths_or_messages(evidence, source, desc, n):
+    fs = [{**fake_finding(i), "evidence": evidence, "source": source, "description": desc,
+           "component": f"pkg{i}"} for i in range(n)]
+    line = json.dumps(record(hist(fs)))
+    for secret in (evidence, source, desc):
+        assert json.dumps(secret)[1:-1] not in line, f"leaked {secret!r} into history"
+
+
+@FAST
+@given(extra=st.dictionaries(st.from_regex(r"[a-z_]{1,12}", fullmatch=True), st.text(max_size=10), max_size=5))
+def test_history_record_is_built_from_an_allow_list(extra):
+    rec = record(hist([{**fake_finding(1), **extra}]))
+    assert set(rec) == RECORD_KEYS
+    assert all(set(f) == FINDING_KEYS for f in rec["findings"])
+
+
+def test_history_component_is_sanitised_and_short():
+    rec = record(hist([{**fake_finding(1), "component": "\x1b[31mevil\npkg\u202e" + "a" * 500}]))
+    comp = rec["findings"][0]["component"]
+    assert "\x1b" not in comp and "\n" not in comp and "\u202e" not in comp and len(comp) <= 121
+
+
+@FAST
+@given(before=st.sets(st.integers(0, 9), max_size=8), after=st.sets(st.integers(0, 9), max_size=8))
+def test_resolved_and_remaining_partition_the_baseline(before, after):
+    base = record(hist([fake_finding(i) for i in sorted(before)]))
+    now = record(hist([fake_finding(i) for i in sorted(after)]), [base])
+    base_keys = {f["key"] for f in base["findings"]}
+    remaining = {f["key"] for f in now["findings"] if f["learn"] == "remaining"}
+    assert remaining | set(now["resolved"]) == base_keys and not remaining & set(now["resolved"])
+    assert {f["learn"] for f in now["findings"] if f["key"] not in base_keys} <= {"new"}
+
+
+@FAST
+@given(before=st.sets(st.integers(0, 9), min_size=1, max_size=8))
+def test_incomplete_scan_resolves_nothing_and_is_never_a_baseline(before):
+    base = record(hist([fake_finding(i) for i in sorted(before)]))
+    broken = record(hist([], errors=1), [base])  # OSV down: everything "disappeared"
+    assert broken["complete"] is False and broken["resolved"] == [], "an error must never look like a fix"
+    again = record(hist([fake_finding(i) for i in sorted(before)]), [base, broken])
+    assert {f["learn"] for f in again["findings"]} == {"remaining"}, "baseline must skip the incomplete record"
+
+
+def test_fix_then_reintroduction_is_reported_as_recurred():
+    r1 = record(hist([fake_finding(1)]))
+    r2 = record(hist([]), [r1])
+    r3 = record(hist([fake_finding(1)]), [r1, r2])
+    assert r2["resolved"] == [r1["findings"][0]["key"]]
+    assert r3["findings"][0]["learn"] == "recurred"
+
+
+def test_key_is_stable_and_ignores_volatile_fields():
+    a = record(hist([{**fake_finding(1), "id": "SG-001", "source": "x"}]))
+    b = record(hist([{**fake_finding(1), "id": "SG-077", "source": "y"}]))
+    assert a["findings"][0]["key"] == b["findings"][0]["key"]
+
+
+@FAST
+@given(lines=st.lists(st.one_of(st.text(max_size=30), st.just("{}"), st.just("[1]"), st.just('{"v":1}'),
+                                st.just('{"v":1,"complete":true,"findings":"x","resolved":[]}')), max_size=8))
+def test_garbage_history_lines_are_skipped_and_counted(tmp_path_factory, lines):
+    p = tmp_path_factory.mktemp("h") / "history.jsonl"
+    good = record(hist([fake_finding(1)]))
+    p.write_text("\n".join([json.dumps(good), *[l.replace("\n", " ") for l in lines]]) + "\n")
+    records, skipped = sg_scan.read_history(p)
+    assert records == [good]
+    assert skipped == sum(1 for l in lines if l.replace("\n", " ").strip())
+    summary = sg_scan.learn_summary(records, skipped)
+    assert summary["skipped_lines"] == skipped
+
+
+def test_learn_summary_finds_top_rules_recurred_and_long_open():
+    r1 = record(hist([fake_finding(1, "SKL-002"), fake_finding(2, "SKL-005")]))
+    r2 = record(hist([fake_finding(2, "SKL-005")]), [r1])
+    r3 = record(hist([fake_finding(1, "SKL-002"), fake_finding(2, "SKL-005")]), [r1, r2])
+    s = sg_scan.learn_summary([r1, r2, r3], 0)
+    assert s["runs"] == 3 and s["top_rules"][0] == ["SKL-005", 3]
+    assert [f["component"] for f in s["recurred"]] == ["c1"]
+    assert [f["component"] for f in s["still_open"]] == ["c2"]
+    text = sg_scan.render_learn(s)
+    assert "c1" in text and "c2" in text and "SKL-005" in text
+
+
+def run_hist(tmp_path, *args):
+    return subprocess.run([sys.executable, str(SCANNER), str(tmp_path), "--offline", "--format", "json", *args],
+                          capture_output=True, text=True, timeout=60)
+
+
+def test_cli_history_appends_and_never_changes_the_exit_code(tmp_path):
+    write(tmp_path, ".kiro/settings/mcp.json", json.dumps({"mcpServers": {"s": {"autoApprove": ["*"]}}}))
+    plain = run_hist(tmp_path)
+    r1 = run_hist(tmp_path, "--history")
+    r2 = run_hist(tmp_path, "--history", "--phase", "verification")
+    assert plain.returncode == r1.returncode == r2.returncode == 1
+    assert json.loads(plain.stdout)["findings"] == json.loads(r1.stdout)["findings"]
+    lines = (tmp_path / ".supplaiguard" / "history.jsonl").read_text().splitlines()
+    assert [json.loads(l)["phase"] for l in lines] == ["analysis", "verification"]
+    assert json.loads(lines[1])["findings"][0]["learn"] == "remaining"
+
+
+def test_cli_history_write_failure_keeps_the_scan_result(tmp_path):
+    write(tmp_path, ".kiro/settings/mcp.json", json.dumps({"mcpServers": {"s": {"autoApprove": ["*"]}}}))
+    (tmp_path / "blocker").write_text("not a dir")
+    r = run_hist(tmp_path, "--history", str(tmp_path / "blocker" / "h.jsonl"))
+    assert r.returncode == 1 and json.loads(r.stdout)["findings"] and "history" in r.stderr.lower()
+
+
+def test_cli_learn_report_without_history_says_so_and_exits_0(tmp_path):
+    r = subprocess.run([sys.executable, str(SCANNER), str(tmp_path), "--learn-report"],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0 and "no history" in r.stdout.lower()
+
+
+def test_cli_learn_report_json(tmp_path):
+    write(tmp_path, ".kiro/settings/mcp.json", json.dumps({"mcpServers": {"s": {"autoApprove": ["*"]}}}))
+    run_hist(tmp_path, "--history")
+    r = subprocess.run([sys.executable, str(SCANNER), str(tmp_path), "--learn-report", "--format", "json"],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0 and json.loads(r.stdout)["runs"] == 1

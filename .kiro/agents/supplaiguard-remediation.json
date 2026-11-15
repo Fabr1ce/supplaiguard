@@ -1,6 +1,6 @@
 {
   "name": "supplaiguard-remediation",
-  "description": "SupplAIGuard Remediation agent. Proposes and applies safe, approval-gated fixes (dependency bumps and config tightening). The only SupplAIGuard agent allowed to write; writes are scoped to manifests/config and deny secret/prod paths.",
+  "description": "SupplAIGuard Remediation agent. Proposes and applies safe, approval-gated fixes (dependency bumps and config tightening) on its own supplaiguard/fix-<scan_id> branch, commits them, and pushes that branch and opens a PR only after asking. Never merges. Writes are scoped to manifests/config and deny secret/prod paths.",
   "prompt": "file://./prompts/remediation.md",
   "mcpServers": {},
   "tools": [
@@ -31,19 +31,39 @@
     },
     "execute_bash": {
       "allowedCommands": [
-        "npm install .*",
-        "npm ci",
         "curl -s https://api\\.osv\\.dev/.*",
         "echo .*",
-        "jq .*"
+        "jq .*",
+        "git status --porcelain",
+        "git rev-parse --is-inside-work-tree",
+        "git rev-parse --short HEAD",
+        "git branch --show-current"
       ],
       "deniedCommands": [
         "rm .*",
         "sudo .*",
-        "git push .*",
-        "git merge .*",
         "bash .*",
-        "sh .*"
+        "sh .*",
+        "git merge .*",
+        "gh pr merge .*",
+        "git push .*--force.*",
+        "git push (.* )?-f( .*)?",
+        "git push .*\\+.*",
+        "git push .*:.*",
+        "git push --(all|mirror|delete|tags).*",
+        "git push .* -d .*",
+        "git push .* (main|master).*",
+        "git push origin HEAD.*",
+        "git push -u origin supplaiguard/fix-[^ ]* .*",
+        "git branch -D .* .*",
+        "git commit .*--amend.*",
+        "git reset .*",
+        "git rebase .*",
+        ".*;.*",
+        ".*&&.*",
+        ".*\\|\\|.*",
+        ".*`.*",
+        ".*\\$\\(.*"
       ]
     }
   },
@@ -62,7 +82,11 @@
         "match": [
           "curl -s https://api.osv.dev/*",
           "echo *",
-          "jq *"
+          "jq *",
+          "git status --porcelain",
+          "git rev-parse --is-inside-work-tree",
+          "git rev-parse --short HEAD",
+          "git branch --show-current"
         ],
         "effect": "allow"
       },
@@ -70,7 +94,14 @@
         "capability": "shell",
         "match": [
           "npm install *",
-          "npm ci"
+          "npm ci",
+          "git switch -c supplaiguard/fix-*",
+          "git switch *",
+          "git add *",
+          "git commit -m *",
+          "git branch -D supplaiguard/fix-*",
+          "git push -u origin supplaiguard/fix-*",
+          "gh pr create *"
         ],
         "effect": "ask"
       },
@@ -79,11 +110,33 @@
         "match": [
           "rm *",
           "sudo *",
-          "git push *",
-          "git merge *",
           "bash *",
           "sh *",
-          "gh pr merge *"
+          "git merge *",
+          "gh pr merge *",
+          "git push *--force*",
+          "git push -f*",
+          "git push * -f*",
+          "git push *+*",
+          "git push *:*",
+          "git push --all*",
+          "git push --mirror*",
+          "git push --delete*",
+          "git push * -d *",
+          "git push --tags*",
+          "git push * main*",
+          "git push * master*",
+          "git push origin HEAD*",
+          "git push -u origin supplaiguard/fix-* *",
+          "git branch -D * *",
+          "git commit *--amend*",
+          "git reset *",
+          "git rebase *",
+          "*;*",
+          "*&&*",
+          "*||*",
+          "*`*",
+          "*$(*"
         ],
         "effect": "deny"
       },

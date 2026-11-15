@@ -87,7 +87,7 @@ flowchart LR
     ok{{"YOU approve<br/>every file write"}}
     r["3 Remediate<br/>Remediation agent"]
     v["4 Verify<br/>Verification agent<br/>PASS, FAIL or NEEDS_REVIEW"]
-    l["5 Learn<br/>planned"]
+    l["5 Learn<br/>local history<br/>CI loop planned"]
     scan[["Deterministic scanner<br/>rules + OSV.dev"]]
     rev["Reviewer agent<br/>different model, read-only"]
 
@@ -108,12 +108,11 @@ flowchart LR
     classDef core fill:#dff5e1,stroke:#3a9d4f,color:#222
     classDef agent fill:#fff,stroke:#333,color:#222
     class ok human
-    class l planned
     class scan core
     class d,a,r,v,rev agent
 ```
 
-<sub>Yellow is a human decision. Green is deterministic code. Dashed grey is planned. Hooks sit on the arrows they fire on.</sub>
+<sub>Yellow is a human decision. Green is deterministic code. Dotted arrows are hooks (labelled with what fires them) and the Learn loop back to Discover.</sub>
 
 ### Where each Kiro feature is used
 
@@ -131,7 +130,7 @@ flowchart LR
 1. **Every file write asks you first.** The Remediation agent can only edit manifests and agent or MCP config, each edit prompts you, and secret files are denied outright. Dependency installs prompt too, because install scripts run code.
 2. **High-impact changes need your explicit approval:** major version bumps, MCP command changes and permission changes.
 3. **Nothing is "resolved" because a file changed.** A finding is resolved only when the Verification agent's re-scan no longer reports it.
-4. **Nothing merges itself.** No agent may push or merge, and in CI a fix goes to its own branch and a pull request for you to merge.
+4. **Fixes land on their own branch, and nothing merges itself.** The Remediation agent first checks your working tree is clean, then works on a new `supplaiguard/fix-<scan_id>` branch, commits only the files it changed, and asks before pushing that branch and before opening a pull request. Its report starts with the branch, commit and PR link. Merging, force-pushing and pushing any other branch are denied outright.
 5. **A failed scan is never a clean scan.** If anything cannot be checked, the result is INCOMPLETE (exit code 2).
 
 > Status: the scanner, the CI scan and the agent permissions are tested (the permissions have their own
@@ -152,7 +151,7 @@ cd supplaiguard
 uses only the Python standard library:
 
 ```bash
-python3 scanner/sg_scan.py demo/vulnerable-ai-app --pretty
+python3 scanner/sg_scan.py demo/vulnerable-ai-app
 echo "exit code: $?"      # 0 clean | 1 findings | 2 scan errors (never a false all-clear)
 ```
 
@@ -161,11 +160,17 @@ AGT-001/004 and SKL-002/005 from the seeded insecure configs. Point it at any re
 `python3 scanner/sg_scan.py /path/to/your/repo`. Add `--offline` to skip OSV (reported as
 an error, not as clean).
 
-Useful flags: `--format md|html` (job-summary Markdown or a self-contained HTML report),
-`--fail-on high` (only exit 1 for findings at or above a severity), `--out-dir DIR` (write
-`findings.json`, `summary.md` and `report.html`), `--environment local|ci`, and `--suppressions FILE`
-(reviewed false positives: each needs a reason, a rule plus a file, and can expire; suppressed findings
-are still listed in every report, and a broken file exits 2).
+In a terminal this prints a short report: PASS, FAIL or INCOMPLETE, the count by severity, then
+each finding with its fix. When the output is piped or read by an agent it is JSON, as before.
+
+Useful flags:
+- `--format auto|text|json|md|html` picks what is printed. `auto` (the default) is `text` in a terminal and `json` otherwise; `--pretty` indents the JSON. Colour is off when `NO_COLOR` is set.
+- `--format md|html` prints a Markdown summary or a self-contained HTML report **to the terminal**; it does not save a file. To save it: `python3 scanner/sg_scan.py <repo> --format html > report.html`.
+- `--out-dir DIR` **saves** `findings.json`, `summary.md` and `report.html` into `DIR` (and still prints the JSON).
+- `--fail-on high` makes the exit code 1 only for findings at or above that severity.
+- `--environment local|ci` labels the scan; it defaults to `ci` when `GITHUB_ACTIONS=true`.
+- `--history [FILE]` appends a record of this scan to the Learn history (default `.supplaiguard/history.jsonl` in the scanned repo); `--learn-report` summarises it. See [Learn](#learn-what-it-does-today).
+- `--suppressions FILE` applies reviewed false positives: each needs a reason, a rule plus a file, and can expire; suppressed findings are still listed in every report, and a broken file exits 2.
 
 Run the property-based tests (Hypothesis; the scanner itself needs no dependencies):
 
@@ -292,6 +297,28 @@ No repository source leaves the machine, only package name+version coordinates.
 | `supplaiguard-verification` | Re-runs checks; resolves findings only if the check clears | no (shell = OSV only) |
 | `supplaiguard-reviewer` | Independent post-task review on a **different model** | no (read-only) |
 
+## Learn: what it does today
+
+Each scan run by the Threat Analysis and Verification agents (or by you with `--history`) appends one line to
+`.supplaiguard/history.jsonl` in the scanned repo. The line holds the date, scanner version, branch, commit,
+whether the scan was complete, and for each finding only its type, rule, component, severity and one of
+`new`, `remaining` or `recurred`, plus which findings were resolved since the last complete scan. It never
+stores evidence, file paths, file contents or secrets.
+
+The next run starts from it: the Threat Analysis agent runs `--learn-report` and tells you which findings came
+back after being fixed, which have stayed open across the last three runs, and which rules fire most. An
+incomplete scan (for example OSV.dev unreachable) is recorded as incomplete and never counts as a fix.
+Recurring false positives are proposed to you as suppressions; nothing is suppressed automatically.
+
+```bash
+python3 scanner/sg_scan.py /path/to/repo --history      # scan and record
+python3 scanner/sg_scan.py /path/to/repo --learn-report # what has been learned so far
+```
+
+Learn is advisory: it never changes findings or exit codes. Commit the history file or add it to
+`.gitignore`, as you prefer. Still planned: the opt-in CI loop that sends sanitised patterns back to this repo
+as pull requests, and a Kiro Crew steward that triages them (see the spec, R17).
+
 ## Running a scan (local)
 
 From a target repository (e.g. the bundled demo):
@@ -302,7 +329,7 @@ kiro-cli chat --agent supplaiguard-coordinator "Run a full SupplAIGuard scan."
 ```
 
 The Coordinator runs: **discover → analyze → remediate (with your approval) →
-verify**, then prints a consolidated report. Remediation only writes after you
+verify → learn**, then prints a consolidated report that starts with the fix branch, commit and PR. Remediation only writes after you
 approve, and a finding is `resolved` only after verification re-checks it.
 
 ## Automation hooks

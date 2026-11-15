@@ -62,7 +62,7 @@ schema → agents → coordinator → hooks → demo repo → end-to-end verific
   - [x] 8.2 Write its prompt enforcing "resolved only if re-check clears it", regression detection, before/after report keyed by finding `id` _(R6.2, R6.4, R6.5, R6.6)_
 
 - [x] 9. Author the Coordinator agent
-  - [x] 9.1 Create `.kiro/agents/supplaiguard-coordinator.json` with `delegate` + `toolsSettings.subagent.availableAgents` limited to the four domain agents (remediation NOT trusted so it still prompts), no write _(R7.1, R7.5)_
+  - [x] 9.1 Create `.kiro/agents/supplaiguard-coordinator.json` with `delegate` + `toolsSettings.subagent.availableAgents` limited to the four domain agents (remediation NOT trusted so it still prompts), no write _(R7.1, R7.5)_. **Correction (2026-11-13):** a live run showed this config could not start any sub-agent in v3 (`delegate` is a 2.x tool). Now `tools` lists `subagent/<name>` for exactly the four agents. Also, in v3 the parent's policy applies to sub-agent calls and a deny wins, so the Coordinator asks (not denies) for writes; secrets stay denied. Covered by `scanner/tests/test_agent_policy.py`. Still to confirm in a live run: sub-agents start, the scanner call runs without a prompt, and each write prompts
   - [x] 9.2 Write its prompt enforcing stage order (Discovery→Threat→[approval]→Remediation→Verification), schema-preserving hand-offs, consolidated final report _(R7.2, R7.3, R7.4)_
 
 - [x] 10. Author local hooks  _(`version:"v1"` array form; JSON validated)_
@@ -156,6 +156,23 @@ submittable product exists at the end of each block (cut from the bottom if time
 - [ ] 29. Demo video script + recording ≤ 3:00, uploaded public to YouTube _(R18.4)_
 - [ ] 30. Blog post and `#KiroweenHackathon26` social post, URLs in the form _(R18.10)_
 - [ ] 31. Final checks: license visible, `.kiro` not ignored, repo public, run instructions tested from a clean clone _(R18.2–18.4)_
+
+## Phase 3b — Local branch/PR, Learn, text report (added 2026-11-15)
+
+- [x] 32. Text report _(R22)_
+  - [x] 32.1 P9 tests first (10 failed), then `render_text` and `--format auto`; 153 tests pass; PASS, FAIL and INCOMPLETE output checked by hand
+  - [x] 32.2 README: document `--format auto|text`
+- [~] 33. Remediation on its own branch, reported, with prompted push and PR _(R20)_
+  - [x] 33.1 Policy tests first (26 failed before the config change): fix-branch push asks; pushes to main/master, force, refspec, `--all`/`--mirror`/`--delete`, merges are denied; no git state change is `allow`
+  - [x] 33.2 Remediation agent rules (permissions + legacy `toolsSettings`), Coordinator merge/force-push denies
+  - [x] 33.3 `sg-remediation` skill and `remediation.md`: clean-tree check, branch, stage named files, commit, push, PR, cleanup on decline, report header
+  - [x] 33.4 `coordinator.md` repeats the header; `verification.md` states the branch and commit it verified
+  - [ ] 33.5 Live check (needs an attended run): one fix in `~/sg-e2e/app` lands on `supplaiguard/fix-<scan_id>` and each git step prompts. Also confirms the deny > ask precedence assumed in the design
+- [x] 34. Learn, local part _(R21)_
+  - [x] 34.1 P10 property tests first (allow-list, no evidence leak, incomplete never a baseline, resolved/remaining partition, recurred, garbage lines)
+  - [x] 34.2 Scanner: `--history [FILE]`, `--phase`, `--learn-report [FILE]`
+  - [x] 34.3 Threat Analysis and Verification prompts and skills run them; suppressions only proposed
+  - [x] 34.4 README "Learn" section: what it does today and what is still planned (R17 CI loop, Crew). Checked end to end on a scratch repo with Python 3.10: fix shows `resolved`, reintroduction `recurred`, offline run incomplete and resolves nothing, garbage line skipped. 218 tests pass
 
 ## Open risks
 - **Merge wording:** the note says Kiro may "merge if good to go with human approval". Plan keeps merging human-only to honour policy rule 1; confirm that is acceptable.
