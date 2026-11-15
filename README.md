@@ -141,7 +141,7 @@ flowchart LR
 
 **You need:** [Kiro CLI](https://kiro.dev/docs/cli/setup/) v3 (signed in), Python (3.15, the
 latest stable, is recommended and pinned in `.python-version`; the scanner is standard-library
-only and was also run on 3.10), and internet access to `api.osv.dev` (the only external call).
+only and was also run on 3.10), and internet access to `api.osv.dev` (the only external call). The TypeScript MCP demo needs Node 22 or newer (`.nvmrc` pins 26, the current LTS).
 
 ```bash
 git clone https://github.com/Fabr1ce/supplaiguard.git
