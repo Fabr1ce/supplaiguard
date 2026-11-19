@@ -221,6 +221,7 @@ jobs:
           path: ${{ runner.temp }}/site
 
   deploy:
+    name: Deploy Results
     needs: publish
     runs-on: ubuntu-latest
     permissions:
