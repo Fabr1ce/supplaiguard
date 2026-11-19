@@ -288,6 +288,14 @@ jobs:
           code=0
           kiro-cli chat --v3 --no-interactive --agent supplaiguard-threat-analysis \
             --trust-tools=read_file,grep_search "$prompt" > "$RUNNER_TEMP/triage.txt" 2> "$RUNNER_TEMP/triage.err" || code=$?
+          # Show what happened in the job log too, not only in the summary. Output is untrusted text, so
+          # workflow commands are switched off while it is printed.
+          stop="sg-$RANDOM$RANDOM$RANDOM"
+          echo "::stop-commands::$stop"
+          echo "kiro-cli exit code: $code"
+          echo "--- stdout (first 4000 bytes) ---"; head -c 4000 "$RUNNER_TEMP/triage.txt"; echo
+          echo "--- stderr (first 4000 bytes) ---"; head -c 4000 "$RUNNER_TEMP/triage.err"; echo
+          echo "::$stop::"
           {
             echo "<details><summary>Agent triage (experimental, advisory)</summary>"
             echo
