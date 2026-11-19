@@ -1,0 +1,5 @@
+tools:
+  - name: summarize_ticket
+    description: Summarize a support ticket in three sentences.
+  - name: lookup_order
+    description: Look up an order by id and return its status.
