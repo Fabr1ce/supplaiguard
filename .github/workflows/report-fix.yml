@@ -1,0 +1,173 @@
+name: SupplAIGuard report merged fix (reusable)
+
+# After a SupplAIGuard fix PR (branch supplaiguard/fix-*) is approved AND merged, scan the repository before
+# and after the merge and open a pull request on the SupplAIGuard repository with a sanitized report of what
+# was actually fixed, so the rules and agents can learn from it (R17).
+#
+# Call it from a `pull_request: types: [closed]` workflow; see examples/consumer-report-fix.yml.
+#
+# Safety model
+#  - Opt-in: does nothing unless `opt-in` is true.
+#  - Only runs for a merged, same-repository PR from a `supplaiguard/fix-*` branch with at least one approving review.
+#  - The report is built by scanner/evolution_report.py from an allow-list: rule ids, severities, counts, outcome,
+#    scanner version, date. No source, config excerpts, secrets, paths, component names or repository names.
+#  - "Fixed" requires a complete scan after the merge. A failed scan is reported as unverified, never as fixed.
+#  - The scanner never executes code from the scanned repository.
+#  - Delivery uses a GitHub App installation token limited to the SupplAIGuard repository, not a PAT.
+#  - The upstream PR only adds one JSON file under evolution/reports/. It is untrusted input for the maintainer
+#    and never auto-merges.
+
+on:
+  workflow_call:
+    inputs:
+      sg-ref:
+        description: Full 40-character commit SHA of the SupplAIGuard repository whose scanner should run.
+        type: string
+        required: true
+      sg-repository:
+        description: owner/name of the SupplAIGuard repository that receives the report.
+        type: string
+        default: Fabr1ce/supplaiguard
+      path:
+        description: Directory to scan, relative to the repository root.
+        type: string
+        default: "."
+      opt-in:
+        description: Must be true to send anything upstream.
+        type: boolean
+        default: false
+      python-version:
+        type: string
+        default: "3.15"
+    secrets:
+      SG_APP_ID:
+        required: false
+      SG_APP_PRIVATE_KEY:
+        required: false
+
+permissions: {}
+
+jobs:
+  report:
+    if: >-
+      ${{ inputs.opt-in
+      && github.event.pull_request.merged == true
+      && startsWith(github.event.pull_request.head.ref, 'supplaiguard/fix-')
+      && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # read the reviews, to confirm the PR was approved
+    steps:
+      - name: Validate inputs and credentials
+        env:
+          SG_REF: ${{ inputs.sg-ref }}
+          SG_REPO: ${{ inputs.sg-repository }}
+          TARGET_PATH: ${{ inputs.path }}
+          APP_ID: ${{ secrets.SG_APP_ID }}
+          APP_KEY: ${{ secrets.SG_APP_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          [[ "$SG_REF" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sg-ref must be a full 40-character commit SHA"; exit 2; }
+          [[ "$SG_REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "::error::sg-repository must look like owner/name"; exit 2; }
+          case "$TARGET_PATH" in /*|*..*) echo "::error::path must be relative and must not contain '..'"; exit 2 ;; esac
+          if [ -z "$APP_ID" ] || [ -z "$APP_KEY" ]; then
+            echo "::error::SG_APP_ID and SG_APP_PRIVATE_KEY are required to open the upstream PR."; exit 2
+          fi
+
+      - name: Require an approving review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          # Latest review state per reviewer; at least one must be APPROVED.
+          approved=$(gh api "repos/${REPO}/pulls/${PR}/reviews" --paginate \
+            --jq '[.[] | select(.state=="APPROVED" or .state=="CHANGES_REQUESTED" or .state=="DISMISSED")] | group_by(.user.login) | map(last) | map(select(.state=="APPROVED")) | length' | awk '{s+=$1} END{print s+0}')
+          if [ "${approved:-0}" -lt 1 ]; then
+            echo "No approving review on PR #${PR}; nothing is reported upstream." >> "$GITHUB_STEP_SUMMARY"
+            echo "approved=false" >> "$GITHUB_ENV"
+          else
+            echo "approved=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Check out the merge commit
+        if: ${{ env.approved == 'true' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Download the pinned SupplAIGuard scanner
+        if: ${{ env.approved == 'true' }}
+        env:
+          SG_REF: ${{ inputs.sg-ref }}
+          SG_REPO: ${{ inputs.sg-repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sg"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/sg.tar.gz" "https://codeload.github.com/${SG_REPO}/tar.gz/${SG_REF}"
+          tar -xzf "$RUNNER_TEMP/sg.tar.gz" -C "$RUNNER_TEMP/sg" --strip-components=1
+          test -f "$RUNNER_TEMP/sg/scanner/evolution_report.py"
+
+      - name: Set up Python
+        if: ${{ env.approved == 'true' }}
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Scan before and after the merge, build the sanitized report
+        if: ${{ env.approved == 'true' }}
+        env:
+          TARGET_PATH: ${{ inputs.path }}
+        run: |
+          set -uo pipefail
+          sg="$RUNNER_TEMP/sg/scanner"
+          git worktree add --detach "$RUNNER_TEMP/before" HEAD^1
+          # Exit 1 (findings) is expected. Exit 2 puts the errors in the JSON, which evolution_report.py
+          # treats as unverified. A crash leaves no valid JSON and the report step then fails: never "fixed".
+          python "$sg/sg_scan.py" "$RUNNER_TEMP/before/$TARGET_PATH" --environment ci --format json > "$RUNNER_TEMP/before.json" || true
+          python "$sg/sg_scan.py" "$TARGET_PATH" --environment ci --format json > "$RUNNER_TEMP/after.json" || true
+          python "$sg/evolution_report.py" "$RUNNER_TEMP/before.json" "$RUNNER_TEMP/after.json" > "$RUNNER_TEMP/report.json"
+          outcome=$(python -c "import json,sys;print(json.load(open(sys.argv[1]))['outcome'])" "$RUNNER_TEMP/report.json")
+          echo "outcome=$outcome" >> "$GITHUB_ENV"
+          { echo "### Sanitized fix report (outcome: $outcome)"; echo '```json'; cat "$RUNNER_TEMP/report.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create a token limited to the SupplAIGuard repository
+        if: ${{ env.approved == 'true' && env.outcome == 'fixed' }}
+        id: app
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          app-id: ${{ secrets.SG_APP_ID }}
+          private-key: ${{ secrets.SG_APP_PRIVATE_KEY }}
+          owner: ${{ split(inputs.sg-repository, '/')[0] }}
+          repositories: ${{ split(inputs.sg-repository, '/')[1] }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Open the report PR on the SupplAIGuard repository
+        if: ${{ env.approved == 'true' && env.outcome == 'fixed' }}
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SG_REPO: ${{ inputs.sg-repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          branch="evolution/report-${RUN_ID}-${RUN_ATTEMPT}"
+          file="evolution/reports/${RUN_ID}-${RUN_ATTEMPT}.json"
+          gh repo clone "$SG_REPO" "$RUNNER_TEMP/upstream" -- --depth=1
+          cd "$RUNNER_TEMP/upstream"
+          git config user.name "supplaiguard-evolution[bot]"
+          git config user.email "supplaiguard-evolution@users.noreply.github.com"
+          git checkout -b "$branch"
+          mkdir -p evolution/reports
+          cp "$RUNNER_TEMP/report.json" "$file"
+          git add "$file"
+          git commit -m "evolution: report a merged fix (run ${RUN_ID})"
+          git push origin "$branch"
+          gh pr create --repo "$SG_REPO" --head "$branch" \
+            --title "evolution: sanitized fix report ${RUN_ID}" \
+            --body "A SupplAIGuard fix PR was approved and merged in an opted-in repository. This PR adds one sanitized report (rule ids, severities, counts, outcome; no source, secrets, paths or repository names). It is untrusted input: review it, and do not merge without a maintainer decision. Nothing auto-merges."

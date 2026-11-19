@@ -1,0 +1,33 @@
+# OPTIONAL and opt-in. Copy to  .github/workflows/supplaiguard-report-fix.yml
+#
+# When a SupplAIGuard fix PR (branch supplaiguard/fix-*) is approved and merged in your repository, this scans
+# the repository before and after the merge and opens a pull request on Fabr1ce/supplaiguard with a SANITIZED
+# report: rule ids, severities, counts, outcome, scanner version, date. It never contains source code, config
+# excerpts, secrets, file paths, component names or your repository name. A maintainer reviews it; nothing auto-merges.
+#
+# Setup
+#  1. Replace both <FULL_COMMIT_SHA> values with the SAME reviewed 40-character commit SHA of Fabr1ce/supplaiguard.
+#  2. Create a GitHub App installed ONLY on Fabr1ce/supplaiguard with Contents: write and Pull requests: write.
+#     Store its id and private key as the secrets SG_APP_ID and SG_APP_PRIVATE_KEY (no broad personal access token).
+#  3. Turn the feature on with a repository variable:  SG_EVOLUTION_OPT_IN = true
+
+name: SupplAIGuard report merged fix
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions: {}
+
+jobs:
+  report:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: Fabr1ce/supplaiguard/.github/workflows/report-fix.yml@<FULL_COMMIT_SHA>
+    with:
+      sg-ref: <FULL_COMMIT_SHA>
+      opt-in: ${{ vars.SG_EVOLUTION_OPT_IN == 'true' }}
+    secrets:
+      SG_APP_ID: ${{ secrets.SG_APP_ID }}
+      SG_APP_PRIVATE_KEY: ${{ secrets.SG_APP_PRIVATE_KEY }}

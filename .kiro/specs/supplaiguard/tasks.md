@@ -143,8 +143,8 @@ submittable product exists at the end of each block (cut from the bottom if time
 
 ### Block C — Evolution loop + Crew (bonus prize)
 - [ ] 25. Evolution report
-  - [ ] 25.1 Define allow-list schema `evolution-report.schema.json`; sanitizer + property test 5 _(R17.1)_
-  - [ ] 25.2 `evolve` job (opt-in) opens a PR/issue on this repo via GitHub App token _(R17.2–17.3)_
+  - [~] 25.1 Sanitizer `scanner/evolution_report.py` + tests done (allow-list built field by field); JSON schema file and a Hypothesis property still to do _(R17.1)_
+  - [~] 25.2 `.github/workflows/report-fix.yml` (opt-in, on approved+merged `supplaiguard/fix-*` PR) opens a report PR via GitHub App token; written, not yet run against a real merged PR _(R17.2–17.3)_
   - [ ] 25.3 Acceptance gate: scanner tests + PBT + demo corpus must pass for any rule change _(R17.5)_
 - [ ] 26. Crew steward (new repo `supplaiguard-crew`)
   - [ ] 26.1 **Spike first:** install Kiro Crew, learn how a Crew app is packaged and what the repo must contain for the bonus prize _(R18.7)_

@@ -1,0 +1,29 @@
+{
+  "name": "seance-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DEMO ONLY. A small AI-agent gateway seeded with dependency and agent-config problems that need reasoning to fix. Do not deploy.",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc && node --test dist/test/"
+  },
+  "dependencies": {
+    "jsonwebtoken": "8.5.1",
+    "js-yaml": "3.14.1",
+    "lodash": "4.17.20",
+    "optimist": "0.6.1",
+    "passport-jwt": "4.0.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "3.12.10",
+    "@types/jsonwebtoken": "8.5.9",
+    "@types/lodash": "4.17.13",
+    "@types/node": "22.10.2",
+    "@types/optimist": "0.0.33",
+    "@types/passport-jwt": "4.0.1",
+    "typescript": "5.7.2"
+  }
+}

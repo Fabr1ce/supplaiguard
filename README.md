@@ -230,6 +230,26 @@ jobs:
   It runs in an empty directory with read-only tools, because headless Kiro loads the workspace's agents,
   steering and MCP config without a trust prompt.
 - This repository scans its own `.kiro/` with the same workflow (`.github/workflows/self-scan.yml`).
+- **Headless triage inside the demo folders (manual).** *Actions > Demo triage > Run workflow* runs the threat-analysis agent
+  in a copy of `vulnerable-ai-app`, `haunted-storyteller` or `crypt-keeper-mcp` (or all three), so the agent sees a
+  realistic repository. It needs the `KIRO_API_KEY` secret. The copy has every `mcp.json` renamed to `mcp.json.disabled`,
+  because headless Kiro starts workspace MCP servers without a prompt and the demos contain insecure ones (an unpinned
+  `npx` package with `autoApprove: *`). The agent can still read those files as data, and the scanner runs on the
+  untouched original. Read-only tools, no shell, output printed in the job log and uploaded as an artifact.
+  The same run publishes the results to **GitHub Pages**, so nobody needs a GitHub login or Actions access to read
+  them: a page per demo with the scanner's HTML report and the agent's triage text (escaped, shown as plain text; a
+  skipped or failed triage is stated on the page). The run page also shows the findings table in its job summary.
+  Not yet run. One-time setup: *Settings > Pages > Source: GitHub Actions*, then run the workflow.
+
+**Live results (for judges, no login):** https://fabr1ce.github.io/supplaiguard/ (appears after the first run of the
+*Demo triage* workflow; before that it returns 404).
+- **Report a merged fix (opt-in).** When a fix PR (`supplaiguard/fix-*`) is approved and merged, the reusable
+  `report-fix.yml` scans the repository before and after the merge and opens a PR on this repository with one
+  sanitized JSON file under `evolution/reports/`: rule ids, severities, counts, outcome, scanner version and date.
+  It never includes source, config excerpts, secrets, paths, component names or your repository name. A fix counts
+  only if the scan after the merge was complete. It uses a GitHub App token limited to this repository, and a
+  maintainer reviews the PR; nothing auto-merges. Setup is in `examples/consumer-report-fix.yml`. Not yet run against
+  a real merged fix PR, and nothing yet turns the reports into rule changes (R17.2, R17.5).
 
 ```mermaid
 flowchart LR
@@ -241,7 +261,7 @@ flowchart LR
         gate{"Gate<br/>0 pass, 1 findings,<br/>2 scan incomplete"}
         tri["Agent triage, experimental, off by default<br/>Kiro CLI headless in an empty directory<br/>read-only tools, deny rules"]
         fix["Fix PR on its own branch<br/>re-scanned before it opens<br/>planned"]
-        evo["Sanitized report<br/>rule ids, counts, outcomes only<br/>opt-in, planned"]
+        evo["Sanitized report of a merged fix<br/>rule ids, counts, outcomes only<br/>opt-in, untested"]
     end
 
     sum(["Job summary and HTML report"])
