@@ -236,6 +236,16 @@ jobs:
   because headless Kiro starts workspace MCP servers without a prompt and the demos contain insecure ones (an unpinned
   `npx` package with `autoApprove: *`). The agent can still read those files as data, and the scanner runs on the
   untouched original. Read-only tools, no shell, output printed in the job log and uploaded as an artifact.
+  **Optional `propose-fix` input (off by default, experimental, not yet run):** a separate job lets the Remediation
+  agent edit a copy of the demo and opens a **draft pull request** for a person to review. The agent only proposes.
+  `scanner/fix_gate.py` decides what may change, with no model involved: only `package.json`, `requirements*.txt`,
+  agent and skill files and MCP config (never source, secrets, workflows or `.git`, and no symlinks). The lockfile is
+  regenerated with `npm install --package-lock-only --ignore-scripts`, so no install script runs. The scanner re-runs
+  and its before and after result goes in the PR body, together with a warning for any major version change or new
+  dependency, which need your explicit approval. The tests are not run and nothing is marked resolved: that stays with
+  the Verification agent. The triage job keeps `contents: read`; only this job can write. Needs `KIRO_API_KEY` and
+  *Settings > Actions > General > Allow GitHub Actions to create and approve pull requests*. Because a `GITHUB_TOKEN` PR
+  does not start other workflows, close and reopen the draft to run the scan checks on it.
   The same run publishes the results to **GitHub Pages**, so nobody needs a GitHub login or Actions access to read
   them: a page per demo with the scanner's HTML report and the agent's triage text (escaped, shown as plain text; a
   skipped or failed triage is stated on the page). The run page also shows the findings table in its job summary.
