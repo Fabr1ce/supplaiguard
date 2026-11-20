@@ -45,12 +45,14 @@ Deadline Fri 2026-12-04 2:00 PM PT. Test first where code exists. Order is by va
   - [ ] 8.1 Decide Power and Crew; build a small Power; Crew in a separate public repo _(K8.1)_
   - [ ] 8.2 Anything not built: remove from the claims _(K8.2, K4.2)_
 
-- [ ] 9. Launcher (needs approval; only after 1 to 5 are done)
-  - [ ] 9.1 Add an optional `launch_id` input and `run-name` to `demo-triage.yml` _(K6.4)_
-  - [ ] 9.2 Worker with fixed demo ids, concurrency 1, rate and daily caps, kill switch, CORS _(K6.1-K6.3)_
-  - [ ] 9.3 Tests for the Worker's validation and limits; GitHub App setup notes _(K6.2, K6.3)_
-  - [ ] 9.4 Page shows real status only, links to results _(K6.5)_
+- [ ] 9. Launcher and Playground (owner approved 2026-11-20, four demos; brought forward)
+  - [x] 9.1 Add an optional `launch_id` input and `run-name` to `demo-triage.yml` _(K6.4)_
+  - [x] 9.2 Worker with fixed demo ids, concurrency 1, rate and daily caps, kill switch, CORS _(K6.1-K6.3)_
+  - [x] 9.3 Tests for the Worker's validation and limits; GitHub App setup notes _(K6.2, K6.3)_
+  - [x] 9.4 Page shows real status only, links to results _(K6.5)_
+  - [x] 9.5 `playground/` app: home, live run, results, history; `demos.json` generated from scanner output _(K6.6)_
+  - [x] 9.6 `publish` job builds the app into `site/playground/`; README for deploy _(K6.6)_
 
 ## Not planned
 
-React/Vite/Tailwind/shadcn/Durable-Objects app; animated network visualization (see Out of scope).
+Animated network visualization (see Out of scope).

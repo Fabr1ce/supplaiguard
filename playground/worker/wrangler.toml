@@ -1,0 +1,42 @@
+name = "supplaiguard-playground"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+# Production values. Secrets (GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY) are NOT set here: use `wrangler secret put`.
+[vars]
+ALLOWED_ORIGIN = "https://fabr1ce.github.io"
+GITHUB_OWNER = "Fabr1ce"
+GITHUB_REPO = "supplaiguard"
+WORKFLOW_FILE = "demo-triage.yml"
+WORKFLOW_REF = "main"
+# Kill switch: set to "false" in the dashboard (Settings > Variables) to stop launches without a deploy.
+LAUNCH_ENABLED = "true"
+DAILY_CAP = "30"
+PER_CLIENT_LAUNCHES_PER_HOUR = "3"
+
+[[durable_objects.bindings]]
+name = "COORDINATOR"
+class_name = "Coordinator"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Coordinator"]
+
+# Local development: `npm run dev` (uses --env dev). Keep a separate .dev.vars for dev secrets.
+[env.dev]
+name = "supplaiguard-playground-dev"
+[env.dev.vars]
+ALLOWED_ORIGIN = "http://localhost:5173"
+GITHUB_OWNER = "Fabr1ce"
+GITHUB_REPO = "supplaiguard"
+WORKFLOW_FILE = "demo-triage.yml"
+WORKFLOW_REF = "main"
+LAUNCH_ENABLED = "true"
+DAILY_CAP = "10"
+PER_CLIENT_LAUNCHES_PER_HOUR = "3"
+[[env.dev.durable_objects.bindings]]
+name = "COORDINATOR"
+class_name = "Coordinator"
+[[env.dev.migrations]]
+tag = "v1"
+new_sqlite_classes = ["Coordinator"]
