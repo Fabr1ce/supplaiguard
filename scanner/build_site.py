@@ -4,29 +4,84 @@
 Usage: build_site.py INPUT_DIR OUTPUT_DIR RUN_URL DATE
 
 INPUT_DIR holds one directory per demo named `demo-triage-<demo>` (the artifact layout of demo-triage.yml):
-  findings.json, report/report.html, report/summary.md, triage.txt, triage.exit
+  findings.json, report/report.html, report/summary.md, triage.txt, triage.exit, mcp-disabled.txt
 Standard library only. Everything that came from a scanned repository or from the agent is untrusted: it is
-HTML-escaped, demo names are allow-listed, and the run URL must be an https github.com URL.
-A missing or failed agent triage is stated on the page, never hidden.
+HTML-escaped or reduced to allow-listed values, demo names are allow-listed, and the run URL must be an https
+github.com URL. A missing or failed step is stated on the page, never hidden.
 """
 from __future__ import annotations
 
 import html
+import json
 import re
 import shutil
 import sys
 from pathlib import Path
 
+TITLE = "SupplAIGuard Demo Results"
 NAME_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$")
-URL_OK = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/\d+(/[A-Za-z0-9/_-]*)?$")
-CSS = ("body{font:16px/1.5 system-ui,sans-serif;max-width:52rem;margin:2rem auto;padding:0 1rem;color:#222}"
-       "pre{background:#f5f5f5;padding:1rem;overflow:auto;white-space:pre-wrap}"
-       "li{margin:.6rem 0}.bad{color:#b00020}.ok{color:#1b7f3b}")
+URL_OK = re.compile(r"^(https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/actions/runs/\d+(/[A-Za-z0-9/_-]*)?$")
+RULE_OK = re.compile(r"^[A-Z]{3}-\d{3}$")
+SEVERITIES = ("critical", "high", "medium", "low")
+ACRONYMS = {"ai": "AI", "mcp": "MCP", "ci": "CI"}
+DEFAULT_LOGO = Path(__file__).resolve().parent.parent / "assets" / "logo.svg"
+
+# Brand colours come from the logo: dark violet ground, green, purple and orange accents.
+CSS = """
+:root{--bg:#120f1a;--panel:#1a1326;--line:#2a2440;--text:#ece8f5;--mute:#a9a2bd;--green:#8fd36b;--purple:#a265ff;--orange:#ff9f43}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:56rem;margin:0 auto;padding:1.5rem 1rem 3rem}
+header{text-align:center;margin-bottom:1.5rem}
+header img{max-width:100%;height:auto;border-radius:18px}
+h1{font-size:1.9rem;margin:1rem 0 .25rem}
+h2{font-size:1.25rem;margin:2rem 0 .75rem;color:var(--green)}
+a{color:var(--purple)}a:hover{color:var(--orange)}
+.tag{color:var(--mute);margin:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1rem 1.25rem}
+.btn{display:inline-block;background:var(--purple);color:#fff;text-decoration:none;font-weight:600;padding:.7rem 1.2rem;border-radius:10px}
+.btn:hover{background:var(--orange);color:#120f1a}
+.note{color:var(--mute);font-size:.9rem;margin:.6rem 0 0}
+ol.flow{counter-reset:s;list-style:none;padding:0;margin:0}
+ol.flow li{counter-increment:s;position:relative;padding:.4rem 0 .4rem 2.6rem}
+ol.flow li:before{content:counter(s);position:absolute;left:0;top:.35rem;width:1.8rem;height:1.8rem;border-radius:50%;
+ background:var(--line);color:var(--green);font-weight:700;display:flex;align-items:center;justify-content:center}
+table{width:100%;border-collapse:collapse;margin-top:.5rem}
+th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:600;font-size:.85rem}
+.ok{color:var(--green)}.bad{color:var(--orange)}.dim{color:var(--mute)}
+.demo{margin:1rem 0}.demo h3{margin:0 0 .4rem}
+pre{background:#0c0a12;border:1px solid var(--line);padding:1rem;overflow:auto;white-space:pre-wrap;border-radius:10px}
+footer{margin-top:2.5rem;color:var(--mute);font-size:.9rem;text-align:center}
+"""
+
+FLOW = (
+    ("Copy The Demo", "The demo folder is copied to a temporary directory. Every MCP config in the copy is renamed so "
+                      "Kiro cannot start it (headless Kiro starts workspace MCP servers without a prompt)."),
+    ("Deterministic Scan", "The SupplAIGuard scanner checks dependencies against OSV.dev and matches the MCP and "
+                           "agent rules. No model is involved, so the result is reproducible."),
+    ("Agent Triage", "A headless Kiro threat-analysis agent, with read-only tools, reads the findings and the code. It "
+                     "links findings into attack paths and checks whether vulnerable code is actually used."),
+    ("Publish", "These pages are built from the results of this run. A step that did not run is shown as skipped."),
+)
+
+
+def title_case(slug: str) -> str:
+    """vulnerable-ai-app -> Vulnerable AI App"""
+    words = re.split(r"[-_. ]+", slug)
+    return " ".join(ACRONYMS.get(w.lower(), w[:1].upper() + w[1:]) for w in words if w)
 
 
 def _page(title: str, body: str) -> str:
-    return (f'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
-            f"<title>{html.escape(title)}</title><style>{CSS}</style><body>{body}</body></html>")
+    return (f'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            f"<title>{html.escape(title)}</title><style>{CSS}</style><body><main>{body}</main></body></html>")
+
+
+def _header(logo_src: str, h1: str) -> str:
+    return (f'<header><img src="{logo_src}" width="760" alt="SupplAIGuard logo: a stitched green and purple '
+            f'ghost-shield inside a five-step loop">'
+            f"<h1>{html.escape(h1)}</h1>"
+            '<p class="tag">Autonomous Security For AI-Native Applications</p></header>')
 
 
 def _triage_state(d: Path) -> tuple[str, str]:
@@ -40,41 +95,99 @@ def _triage_state(d: Path) -> tuple[str, str]:
     return f"agent triage failed (exit {html.escape(code[:6])})", "bad"
 
 
-def build(src: Path, out: Path, run_url: str, when: str) -> None:
-    if not URL_OK.match(run_url):
+def _copy_state(d: Path) -> tuple[str, str]:
+    f = d / "mcp-disabled.txt"
+    if not f.is_file():
+        return "skipped", "bad"
+    raw = f.read_text().strip()
+    n = int(raw) if raw.isdigit() and len(raw) < 4 else 0
+    return f"done, {n} MCP config{'' if n == 1 else 's'} disabled", "ok"
+
+
+def _counts(d: Path) -> str:
+    """One line of allow-listed counts from findings.json; never raw text from the file."""
+    try:
+        findings = json.loads((d / "findings.json").read_text())["findings"]
+        sev, rules = {}, {}
+        for f in findings:
+            s = f.get("severity") if isinstance(f, dict) else None
+            if s in SEVERITIES:
+                sev[s] = sev.get(s, 0) + 1
+            r = f.get("rule_id") if isinstance(f, dict) else None
+            if isinstance(r, str) and RULE_OK.match(r):
+                rules[r] = rules.get(r, 0) + 1
+        total = len(findings)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return "results unavailable (findings.json missing or unreadable)"
+    parts = [f"{sev[s]} {s}" for s in SEVERITIES if s in sev]
+    line = f"{total} finding{'' if total == 1 else 's'}" + (f": {', '.join(parts)}" if parts else "")
+    if rules:
+        line += f". Rules hit: {', '.join(sorted(rules))}"
+    return line
+
+
+def build(src: Path, out: Path, run_url: str, when: str, logo: Path | None = None) -> None:
+    m = URL_OK.match(run_url)
+    if not m:
         raise ValueError("run_url must be an https://github.com/<owner>/<repo>/actions/runs/<id> URL")
+    repo_url = m.group(1)
     out.mkdir(parents=True, exist_ok=True)
-    items = []
+    logo = logo or DEFAULT_LOGO
+    has_logo = logo.is_file()
+    if has_logo:
+        shutil.copyfile(logo, out / "logo.svg")
+
+    rows, cards = [], []
     for d in sorted(p for p in src.glob("demo-triage-*") if p.is_dir()):
         name = d.name.removeprefix("demo-triage-")
         if not NAME_OK.match(name) or name in {".", ".."}:
             continue
+        shown = html.escape(title_case(name))
         dest = out / name
         dest.mkdir(parents=True, exist_ok=True)
-        parts = []
+
+        copy_l, copy_c = _copy_state(d)
         report = d / "report" / "report.html"
         if report.is_file():
             shutil.copyfile(report, dest / "report.html")
-            parts.append(f'<a href="{name}/report.html">scanner report</a>')
+            scan_l, scan_c = "done", "ok"
         else:
-            parts.append('<span class="bad">scanner report missing</span>')
-        label, cls = _triage_state(d)
+            scan_l, scan_c = "report missing", "bad"
+        tri_l, tri_c = _triage_state(d)
+
+        links = [f'<a href="{name}/report.html">Scanner Report</a>'] if report.is_file() else []
         triage = d / "triage.txt"
         if triage.is_file():
             text = triage.read_text(errors="replace")[:60000]
-            (dest / "triage.html").write_text(
-                _page(f"{name}: agent triage", f"<h1>{html.escape(name)}: agent triage</h1><p>{label}</p>"
-                      f"<p>Untrusted model output about an untrusted repository. Shown as plain text.</p>"
-                      f"<pre>{html.escape(text)}</pre><p><a href=\"../index.html\">back</a></p>"))
-            parts.append(f'<a href="{name}/triage.html">agent triage output</a>')
-        items.append(f"<li><strong>{html.escape(name)}</strong>: {' | '.join(parts)}<br>"
-                     f'<span class="{cls}">{label}</span></li>')
-    body = ("<h1>SupplAIGuard demo results</h1>"
-            "<p>Deterministic scanner reports for the demo repositories, plus the output of the headless Kiro "
-            "threat-analysis agent where it ran. Generated by GitHub Actions; no login is needed to read this page.</p>"
-            f"<ul>{''.join(items) or '<li>No demo results were found.</li>'}</ul>"
-            f'<p>Generated {html.escape(when)} by <a href="{html.escape(run_url, quote=True)}">this workflow run</a>.</p>')
-    (out / "index.html").write_text(_page("SupplAIGuard demo results", body))
+            logo_tag = '<header><a href="../index.html"><img src="../logo.svg" width="380" alt="SupplAIGuard logo"></a></header>' if has_logo else ""
+            (dest / "triage.html").write_text(_page(
+                f"{title_case(name)}: Agent Triage",
+                f"{logo_tag}<h1>{shown}: Agent Triage</h1><p class=\"{tri_c}\">{tri_l}</p>"
+                "<p class=\"note\">Untrusted model output about an untrusted repository. Shown as plain text.</p>"
+                f"<pre>{html.escape(text)}</pre><p><a href=\"../index.html\">Back To All Demos</a></p>"))
+            links.append(f'<a href="{name}/triage.html">Agent Triage Output</a>')
+
+        rows.append(f"<tr><td><strong>{shown}</strong></td><td class=\"{copy_c}\">{copy_l}</td>"
+                    f"<td class=\"{scan_c}\">{scan_l}</td><td class=\"{tri_c}\">{tri_l}</td></tr>")
+        cards.append(f'<div class="panel demo"><h3>{shown}</h3><p>{html.escape(_counts(d))}</p>'
+                     f"<p>{' | '.join(links) or 'No reports were produced.'}</p></div>")
+
+    flow_items = "".join(f"<li><strong>{n}</strong><br><span class=\"dim\">{html.escape(t)}</span></li>" for n, t in FLOW)
+    body = (
+        (_header("logo.svg", TITLE) if has_logo else f"<header><h1>{html.escape(TITLE)}</h1></header>")
+        + '<div class="panel"><a class="btn" href="' + html.escape(repo_url, quote=True) + '/actions/workflows/demo-triage.yml">Run The Demo Workflow</a>'
+        '<p class="note">Starting a run needs write access to the repository, so the button opens the workflow page '
+        "on GitHub. Everyone else can read the latest results below, or fork the repository and run it there.</p></div>"
+        "<h2>How The Flow Works</h2>"
+        f'<div class="panel"><ol class="flow">{flow_items}</ol></div>'
+        "<h2>What Happened In This Run</h2>"
+        '<div class="panel"><table><tr><th>Demo</th><th>Copy The Demo</th><th>Deterministic Scan</th><th>Agent Triage</th></tr>'
+        f"{''.join(rows) or '<tr><td colspan=4>No demo results were found.</td></tr>'}</table></div>"
+        "<h2>Results</h2>" + ("".join(cards) or '<div class="panel">No demo results were found.</div>')
+        + f'<footer>Generated {html.escape(when)} by <a href="{html.escape(run_url, quote=True)}">this workflow run</a>. '
+        "No login is needed to read this page.</footer>"
+    )
+    (out / "index.html").write_text(_page(TITLE, body))
     (out / ".nojekyll").write_text("")
 
 

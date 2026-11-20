@@ -102,7 +102,9 @@ jobs:
           # node_modules is never needed for triage and is not committed anyway.
           tar -C "demo/$DEMO" --exclude=node_modules --exclude=.venv --exclude=dist -cf - . | tar -C "$work" -xf -
           # Kiro loads <workspace>/.kiro/settings/mcp.json. Rename every MCP config and drop workspace hooks.
+          n=$(find "$work" -type f \( -name 'mcp.json' -o -name '.mcp.json' \) | wc -l)
           find "$work" -type f \( -name 'mcp.json' -o -name '.mcp.json' \) -print -exec sh -c 'mv "$1" "$1.disabled"' _ {} \;
+          echo "$n" > "$RUNNER_TEMP/out/mcp-disabled.txt" # shown on the results page
           rm -rf "$work/.kiro/hooks"
           cp "$RUNNER_TEMP/out/findings.json" "$work/findings.json"
           # Fail closed if anything that Kiro would load as an MCP server is still there.
@@ -219,6 +221,7 @@ jobs:
           path: ${{ runner.temp }}/site
 
   deploy:
+    name: Deploy Results
     needs: publish
     runs-on: ubuntu-latest
     permissions:
