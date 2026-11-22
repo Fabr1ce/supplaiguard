@@ -198,6 +198,16 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
+      - name: Record the demo name in the artifact
+        if: ${{ always() }}
+        env:
+          DEMO: ${{ matrix.demo }}
+        run: |
+          # download-artifact puts a single matched artifact straight into the target folder (no demo-triage-<demo>
+          # subfolder), so the results page reads the demo name from this file.
+          mkdir -p "$RUNNER_TEMP/out"
+          echo "$DEMO" > "$RUNNER_TEMP/out/demo-name.txt"
+
       - name: Upload results
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -469,6 +479,8 @@ jobs:
 
       - name: Build the site
         env:
+          # Fallback demo name if the artifact has no demo-name.txt; empty for "all". Checked by build_site.py.
+          DEMO_NAME: ${{ inputs.demo != 'all' && inputs.demo || '' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail

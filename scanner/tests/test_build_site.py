@@ -155,3 +155,79 @@ def test_broken_findings_json_does_not_break_the_build(tmp_path):
     (src / "demo-triage-a" / "findings.json").write_text("not json")
     bs.build(src, out, run_url=RUN, when="d")
     assert "results unavailable" in (out / "index.html").read_text().lower()
+
+
+# ---- flat layout (download-artifact extracts a single matched artifact straight into the input folder) --------
+
+def make_flat(root: Path, name_file: str | None = None, triage: str | None = None):
+    root.mkdir(parents=True)
+    (root / "findings.json").write_text('{"findings":[{"severity":"high","rule_id":"MCP-001"}]}')
+    (root / "report").mkdir()
+    (root / "report" / "report.html").write_text("<html>flat</html>")
+    (root / "mcp-disabled.txt").write_text("1")
+    if name_file is not None:
+        (root / "demo-name.txt").write_text(name_file)
+    if triage is not None:
+        (root / "triage.txt").write_text(triage)
+        (root / "triage.exit").write_text("0")
+
+
+def test_flat_layout_is_built_using_the_name_file(tmp_path):
+    src, out = tmp_path / "in", tmp_path / "site"
+    make_flat(src, name_file="vulnerable-ai-app\n", triage="ok")
+    bs.build(src, out, run_url=RUN, when="d")
+    index = (out / "index.html").read_text()
+    assert "No demo results" not in index
+    assert 'href="vulnerable-ai-app/report.html"' in index and "1 high" in index
+    assert (out / "vulnerable-ai-app" / "report.html").read_text() == "<html>flat</html>"
+    assert (out / "vulnerable-ai-app" / "triage.html").is_file()
+
+
+def test_flat_layout_falls_back_to_demo_name_setting_then_generic(tmp_path):
+    src, out = tmp_path / "in", tmp_path / "site"
+    make_flat(src)
+    bs.build(src, out, run_url=RUN, when="d", demo_name="haunted-storyteller")
+    assert (out / "haunted-storyteller" / "report.html").is_file()
+    src2, out2 = tmp_path / "in2", tmp_path / "site2"
+    make_flat(src2)
+    bs.build(src2, out2, run_url=RUN, when="d")
+    assert (out2 / "demo" / "report.html").is_file()
+
+
+@pytest.mark.parametrize("bad", ["../evil", 'x"><script>', "a/b", ""])
+def test_flat_layout_rejects_unsafe_names(tmp_path, bad):
+    src, out = tmp_path / "in", tmp_path / "site"
+    make_flat(src, name_file=bad)
+    bs.build(src, out, run_url=RUN, when="d", demo_name='<b>"')
+    index = (out / "index.html").read_text()
+    assert "evil" not in index and "<script>" not in index and "<b>" not in index
+    assert (out / "demo" / "report.html").is_file()
+
+
+def test_nested_layout_wins_over_stray_flat_files(tmp_path):
+    src, out = tmp_path / "in", tmp_path / "site"
+    make_demo(src, "a")
+    (src / "findings.json").write_text('{"findings":[]}')
+    bs.build(src, out, run_url=RUN, when="d")
+    assert (out / "a" / "report.html").is_file() and not (out / "demo").exists()
+
+
+def test_main_reads_demo_name_from_environment(tmp_path, monkeypatch):
+    src, out = tmp_path / "in", tmp_path / "site"
+    make_flat(src)
+    monkeypatch.setenv("DEMO_NAME", "crypt-keeper-mcp")
+    assert bs.main(["build_site.py", str(src), str(out), RUN, "d"]) == 0
+    assert (out / "crypt-keeper-mcp" / "report.html").is_file()
+
+
+@pytest.mark.parametrize("make_src", ["missing", "empty"])
+def test_empty_page_explains_and_never_looks_clean(tmp_path, make_src):
+    src, out = tmp_path / "in", tmp_path / "site"
+    if make_src == "empty":
+        src.mkdir()
+    bs.build(src, out, run_url=RUN, when="d")
+    index = (out / "index.html").read_text()
+    assert "No demo results were found in this run." in index
+    assert "may have skipped the scan, or its results artifact was missing" in index
+    assert f'href="{RUN}"' in index
+    assert "0 findings" not in index and 'class="ok"' not in index and "clean" not in index.lower()
