@@ -1,5 +1,8 @@
 name: Scan a public GitHub repo
 
+# The run name carries only the Playground launch id (never the untrusted repo input), so the Worker can find the run.
+run-name: Scan repo ${{ inputs.launch_id }}
+
 # Manual only. Scans any PUBLIC GitHub repository by URL or owner/name and publishes the report as a job summary
 # and an artifact. Spec: .kiro/specs/scan-github-repo.
 #
@@ -23,6 +26,11 @@ on:
         type: string
         required: false
         default: ""
+      launch_id:
+        description: Correlation id set by the Playground Worker. Leave empty for manual runs.
+        type: string
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -37,8 +45,10 @@ jobs:
         env:
           REPO: ${{ inputs.repo }}
           REF: ${{ inputs.ref }}
+          LAUNCH_ID: ${{ inputs.launch_id }}
         run: |
           set -euo pipefail
+          [[ "$LAUNCH_ID" =~ ^(pg-[0-9a-f]{12})?$ ]] || { echo "::error::launch_id has an unexpected format"; exit 2; }
           re_repo='^(https://github\.com/)?[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}(\.git)?/?$'
           [[ "$REPO" =~ $re_repo ]] || { echo "::error::repo must be owner/name or https://github.com/owner/name"; exit 2; }
           if [ -n "$REF" ]; then
@@ -70,6 +80,8 @@ jobs:
           python scanner/sg_scan.py "${args[@]}" > /dev/null || code=$?
           # A crash before the reports are written must never look like "findings" or "clean".
           if [ ! -f "$out/summary.md" ]; then code=2; fi
+          # Recorded in the artifact so the Playground can show the exit code semantics without guessing.
+          mkdir -p "$out" && echo "$code" > "$out/exit-code.txt"
           echo "exit-code=$code" >> "$GITHUB_OUTPUT"
           exit 0
 

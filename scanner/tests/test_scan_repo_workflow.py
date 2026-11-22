@@ -40,3 +40,16 @@ def test_actions_pinned_by_sha():
 def test_uploads_reports_and_never_reports_incomplete_as_clean():
     assert "upload-artifact" in WF and "GITHUB_STEP_SUMMARY" in WF and "--out-dir" in WF
     assert "NOT a clean result" in WF
+
+
+def test_launch_id_input_and_run_name_never_carry_the_repo():
+    assert re.search(r"\n      launch_id:\n", WF)
+    m = re.search(r"^run-name: (.*)$", WF, re.M)
+    assert m and "inputs.launch_id" in m.group(1)
+    assert "inputs.repo" not in m.group(1) and "inputs.ref" not in m.group(1)
+    assert "LAUNCH_ID: ${{ inputs.launch_id }}" in WF
+    assert "pg-[0-9a-f]{12}" in WF  # same shape the Worker issues (playground/worker/src/demos.ts LAUNCH_ID_RE)
+
+
+def test_records_exit_code_in_the_artifact():
+    assert 'echo "$code" > "$out/exit-code.txt"' in WF
