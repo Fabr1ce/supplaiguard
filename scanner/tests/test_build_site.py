@@ -231,3 +231,29 @@ def test_empty_page_explains_and_never_looks_clean(tmp_path, make_src):
     assert "may have skipped the scan, or its results artifact was missing" in index
     assert f'href="{RUN}"' in index
     assert "0 findings" not in index and 'class="ok"' not in index and "clean" not in index.lower()
+
+
+# ---- refreshed copy ----------------------------------------------------------------------------------------
+
+def test_flow_includes_the_remediation_loop_in_order(tmp_path):
+    src, out = tmp_path / "in", tmp_path / "site"
+    make_demo(src, "a")
+    bs.build(src, out, run_url=RUN, when="d")
+    index = (out / "index.html").read_text()
+    steps = ("Copy The Demo", "Deterministic Scan", "Agent Triage", "Publish", "Remediate", "Verify", "Learn")
+    pos = [index.index(f"<strong>{s}</strong>") for s in steps]
+    assert pos == sorted(pos)
+    assert "DRAFT pull request" in index and "nothing merges automatically" in index.lower()
+    assert "not tracked on this page" in index
+    assert "\u2014" not in index
+
+
+def test_latest_run_only_and_links(tmp_path):
+    src, out = tmp_path / "in", tmp_path / "site"
+    make_demo(src, "a")
+    bs.build(src, out, run_url=RUN, when="d")
+    index = (out / "index.html").read_text()
+    assert "This page shows the latest run only" in index
+    assert '<a href="playground/">Open The Playground</a>' in index
+    assert 'href="https://github.com/Fabr1ce/supplaiguard/tree/main/docs">Documentation</a>' in index
+    assert '<a href="https://github.com/o/r">Repository</a>' in index

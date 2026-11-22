@@ -74,7 +74,17 @@ FLOW = (
     ("Agent Triage", "A headless Kiro threat-analysis agent, with read-only tools, reads the findings and the code. It "
                      "links findings into attack paths and checks whether vulnerable code is actually used."),
     ("Publish", "These pages are built from the results of this run. A step that did not run is shown as skipped."),
+    ("Remediate", "Optional, off by default (the propose-fix input). A separate job lets the Remediation agent edit a "
+                  "copy of the demo. A deterministic fix gate allows only manifests and agent or MCP config, never "
+                  "source, secrets or workflows. The result is a DRAFT pull request. A person reviews it, and "
+                  "nothing merges automatically."),
+    ("Verify", "The scanner runs again on the changed copy, and the draft pull request lists the before and after "
+               "result. A finding counts as resolved only when a re-scan no longer reports it. The tests are not run."),
+    ("Learn", "Opt-in. After a person merges a fix, a sanitized report (rule ids, severities, counts and outcome, no "
+              "source or paths) can be sent upstream so the rules improve."),
 )
+OPTIONAL_NOTE = ("Remediate, Verify and Learn are not tracked on this page. They happen in a separate Propose Fix job "
+                 "and in your own repository, so open the workflow run to see whether Remediate ran.")
 
 
 def title_case(slug: str) -> str:
@@ -208,6 +218,10 @@ def build(src: Path, out: Path, run_url: str, when: str, banner: Path | None = N
         cards.append(f'<div class="panel demo"><h3>{shown}</h3><p>{html.escape(_counts(d))}</p>'
                      f"<p>{' | '.join(links) or 'No reports were produced.'}</p></div>")
 
+    links_row = (' | '.join((
+        '<a href="playground/">Open The Playground</a>',
+        '<a href="https://github.com/Fabr1ce/supplaiguard/tree/main/docs">Documentation</a>',
+        f'<a href="{html.escape(repo_url, quote=True)}">Repository</a>')))
     empty = ("No demo results were found in this run. The run may have skipped the scan, or its results artifact was "
              f'missing. <a href="{html.escape(run_url, quote=True)}">Open the workflow run</a> to see which step failed.')
     flow_items = "".join(f"<li><strong>{n}</strong><br><span class=\"dim\">{html.escape(t)}</span></li>" for n, t in FLOW)
@@ -216,8 +230,10 @@ def build(src: Path, out: Path, run_url: str, when: str, banner: Path | None = N
         + '<div class="panel"><a class="btn" href="' + html.escape(repo_url, quote=True) + '/actions/workflows/demo-triage.yml">Run The Demo Workflow</a>'
         '<p class="note">Starting a run needs write access to the repository, so the button opens the workflow page '
         "on GitHub. Everyone else can read the latest results below, or fork the repository and run it there.</p></div>"
+        '<p class="note">This page shows the latest run only. Each run replaces the whole page with its own results.</p>'
+        f'<p>{links_row}</p>'
         "<h2>How The Flow Works</h2>"
-        f'<div class="panel"><ol class="flow">{flow_items}</ol></div>'
+        f'<div class="panel"><ol class="flow">{flow_items}</ol><p class="note">{html.escape(OPTIONAL_NOTE)}</p></div>'
         "<h2>What Happened In This Run</h2>"
         '<div class="panel"><table><tr><th>Demo</th><th>Copy The Demo</th><th>Deterministic Scan</th><th>Agent Triage</th></tr>'
         f"{''.join(rows) or '<tr><td colspan=4 class=bad>' + empty + '</td></tr>'}</table></div>"
