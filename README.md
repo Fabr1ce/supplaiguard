@@ -246,6 +246,8 @@ jobs:
   the Verification agent. The triage job keeps `contents: read`; only this job can write. Needs `KIRO_API_KEY` and
   *Settings > Actions > General > Allow GitHub Actions to create and approve pull requests*. Because a `GITHUB_TOKEN` PR
   does not start other workflows, close and reopen the draft to run the scan checks on it.
+  The Playground can request this job through the Worker setting `PROPOSE_FIX_ENABLED` (off unless exactly `"true"`); see
+  `playground/README.md` for the flow, the limits, the cost and how to turn it off.
   The same run publishes the results to **GitHub Pages**, so nobody needs a GitHub login or Actions access to read
   them: a page per demo with the scanner's HTML report and the agent's triage text (escaped, shown as plain text; a
   skipped or failed triage is stated on the page). The run page also shows the findings table in its job summary.
