@@ -530,10 +530,11 @@ def test_key_is_stable_and_ignores_volatile_fields():
 def test_garbage_history_lines_are_skipped_and_counted(tmp_path_factory, lines):
     p = tmp_path_factory.mktemp("h") / "history.jsonl"
     good = record(hist([fake_finding(1)]))
-    p.write_text("\n".join([json.dumps(good), *[l.replace("\n", " ") for l in lines]]) + "\n")
+    lines = [" ".join(l.splitlines()) for l in lines]  # splitlines() also breaks on \r, \x0b, \x1c...
+    p.write_text("\n".join([json.dumps(good), *lines]) + "\n")
     records, skipped = sg_scan.read_history(p)
     assert records == [good]
-    assert skipped == sum(1 for l in lines if l.replace("\n", " ").strip())
+    assert skipped == sum(1 for l in lines if l.strip())
     summary = sg_scan.learn_summary(records, skipped)
     assert summary["skipped_lines"] == skipped
 

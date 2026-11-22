@@ -9,8 +9,8 @@ Requirement ids refer to `requirements.md`. The open questions are answered (see
   - [x] 2.0 Spec: G8, Decisions, ASI01-ASI10 table, clone-vs-tarball decision
   - [x] 2.1 `scanner/sg_guard.py`: `validate_user_string`, `sanitize_untrusted`, `detect_injection`, `wrap_untrusted`
   - [x] 2.2 Call the guard from `parse_github_ref`; unit and hypothesis tests (`test_sg_guard.py`)
-  - [ ] 2.3 Injection detector wired into the scan as `suspicious_agent_skill` findings, incl. file names and HEAD commit message
-  - [ ] 2.4 Escaped reports, no state written from repo text, injection findings never clean; tests
+  - [x] 2.3 Injection detector wired into the scan as `suspicious_agent_skill` findings, incl. file names and HEAD commit message
+  - [x] 2.4 Escaped reports, no state written from repo text, injection findings never clean; tests
   - [ ] 2.5 Harden `demo-triage.yml` and any agent prompt to consume `wrap_untrusted` data; policy test
   - [ ] 2.6 Re-verify ASI names against genai.owasp.org when online and fix the table in `design.md`
 - [ ] 3. Fetch (G2)

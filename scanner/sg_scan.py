@@ -29,6 +29,8 @@ import urllib.request
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+import sg_guard  # sibling module, stdlib only
+
 VERSION = "0.2.0"
 SEV_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 FINDING_TYPES = {"vulnerable_dependency", "malicious_package_indicator", "insecure_mcp_configuration",
@@ -41,6 +43,9 @@ OSV_VULN = "https://api.osv.dev/v1/vulns/"
 SKIP_DIRS = {"node_modules", ".git", ".venv", "venv", "__pycache__"}
 MAX_FILES = 50000
 MAX_FILE_BYTES = 5 * 1024 * 1024
+MAX_DOC_BYTES = 100 * 1024  # prose files are read for injection text up to this many bytes
+MAX_JSON_STRINGS = 5000
+MAX_NAME_FINDINGS = 100
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "[::1]", "0.0.0.0")
 SECRET_KEY = re.compile(r"(key|token|secret|password|passwd|credential|authorization)", re.I)
 ENV_REF = re.compile(r"^\$\{?\w+\}?$")
@@ -230,6 +235,75 @@ def scan_skl(scan: Scan, component: str, source: str, text: str):
             scan.add(type="suspicious_agent_skill", component=component, severity=sev, source=source,
                      rule_id=rid, evidence=m.group(0)[:160], description=why,
                      confidence="medium" if rid == "SKL-005" else "high")
+    scan_injection(scan, component, source, text)
+
+
+def scan_injection(scan: Scan, component: str, source: str, text, existing: set | None = None) -> int:
+    """Run the prompt-injection detector over untrusted text and add its findings. A finding is skipped when
+    the same rule already fired for the same source on the same evidence (scan_skl overlaps the detector).
+    Returns the number of findings added."""
+    added = 0
+    for f in sg_guard.detect_injection(text, source=source, component=component):
+        ev = f["evidence"]
+        dup = any(g.get("type") == "suspicious_agent_skill" and g.get("rule_id") == f["rule_id"]
+                  and g.get("source") == f["source"]
+                  and (g.get("evidence") == ev or ev in g.get("evidence", "") or g.get("evidence", "") in ev)
+                  for g in scan.findings)
+        if dup:
+            continue
+        scan.add(**f)
+        added += 1
+    return added
+
+
+def _json_strings(node, out: list, depth: int = 0):
+    if len(out) >= MAX_JSON_STRINGS or depth > 40:
+        return
+    if isinstance(node, str):
+        out.append(node)
+    elif isinstance(node, dict):
+        for k, v in node.items():
+            _json_strings(k, out, depth + 1)
+            _json_strings(v, out, depth + 1)
+    elif isinstance(node, list):
+        for v in node:
+            _json_strings(v, out, depth + 1)
+
+
+def scan_json_strings(scan: Scan, p: Path, component: str):
+    """Injection check over every string in an MCP or agent JSON file. Unparseable files are already
+    reported by their own collector, so failures here are silent."""
+    try:
+        data = json.loads(read_capped(p, scan.repo))
+    except (OSError, ValueError):
+        return
+    strings: list[str] = []
+    _json_strings(data, strings)
+    src = rel(scan, p)
+    for s in strings:
+        scan_injection(scan, component, src, s[:MAX_DOC_BYTES])
+
+
+def read_prose(scan: Scan, p: Path) -> str:
+    return read_capped(p, scan.repo, errors="ignore")[:MAX_DOC_BYTES]
+
+
+def scan_names(scan: Scan, files: list[Path]):
+    """Directory and file names are attacker-chosen text too (tag characters, instruction-like names)."""
+    seen: set[str] = set()
+    flagged = 0
+    for p in files:
+        parts = Path(rel(scan, p)).parts
+        for i in range(len(parts)):
+            path = "/".join(parts[: i + 1])
+            if path in seen:
+                continue
+            seen.add(path)
+            if flagged >= MAX_NAME_FINDINGS:
+                scan.error("scanner/limits", "threat_analysis",
+                           f"stopped reporting suspicious file names after {MAX_NAME_FINDINGS} findings")
+                return
+            flagged += scan_injection(scan, "file name", path, parts[i])
 
 
 def scan_agent(scan: Scan, p: Path):
@@ -364,8 +438,11 @@ def scan_deps(scan: Scan, lock: Path, offline: bool):
 
 
 # ---------------------------------------------------------------- scan / validate / exit code
-def run_scan(repo: Path, offline: bool = False, environment: str | None = None) -> dict:
-    """Run every check and return a scan object per the sg-findings-schema skill."""
+def run_scan(repo: Path, offline: bool = False, environment: str | None = None,
+             extra_texts: list[tuple[str, str, str]] | None = None) -> dict:
+    """Run every check and return a scan object per the sg-findings-schema skill.
+    `extra_texts` are (component, source, text) triples of untrusted text the caller already holds
+    (e.g. the HEAD commit subject of a fetched repo); they get the injection check. Stays pure: no I/O here."""
     repo = Path(repo).resolve()
     scan = Scan(repo)
 
@@ -382,15 +459,25 @@ def run_scan(repo: Path, offline: bool = False, environment: str | None = None) 
         if p.name == "mcp.json":
             cov["mcp_json"] += 1
             guarded("threat_analysis", p, scan_mcp, scan, p)
+            guarded("threat_analysis", p, scan_json_strings, scan, p, "mcp.json")
     for p in files:
         if p.name.endswith(".json") and p.parent.name == "agents" and p.parent.parent.name == ".kiro":
             cov["agent_configs"] += 1
             guarded("threat_analysis", p, scan_agent, scan, p)
+            guarded("threat_analysis", p, scan_json_strings, scan, p, p.stem)
     for p in files:
         if p.name == "SKILL.md":
             cov["skills"] += 1
             guarded("threat_analysis", p, lambda p=p: scan_skl(scan, p.parent.name, rel(scan, p),
                                                                 read_capped(p, repo, errors="ignore")))
+    for p in files:
+        parts = Path(rel(scan, p)).parts
+        if re.match(r"(readme|contributing)", p.name, re.I) or (
+                len(parts) == 2 and parts[0] == "docs" and p.suffix.lower() == ".md"):
+            guarded("threat_analysis", p, lambda p=p: scan_injection(scan, p.name, rel(scan, p), read_prose(scan, p)))
+    guarded("threat_analysis", repo, scan_names, scan, files)
+    for component, source, text in extra_texts or []:
+        guarded("threat_analysis", repo, scan_injection, scan, str(component), str(source), text)
     for p in files:
         if p.name == "package-lock.json":
             cov["lockfiles"] += 1
@@ -564,14 +651,22 @@ def apply_suppressions(out: dict, suppressions: list[dict], today: date | None =
 
 # ---------------------------------------------------------------- reports (all text is escaped: evidence is untrusted)
 def _text(v, limit: int = 200) -> str:
+    """Untrusted value to one safe line: no control, bidi, zero-width, tag or ANSI characters, no newlines."""
     if isinstance(v, (list, tuple)):
         v = ", ".join(str(x) for x in v)
-    v = re.sub(r"[\x00-\x1f\x7f]+", " ", str(v if v is not None else ""))
+    v = sg_guard.sanitize_untrusted(v, 1 << 30)
     return v[:limit] + ("…" if len(v) > limit else "")
 
 
+_MD_ESCAPE = {ord(c): f"&#{ord(c)};" for c in "[]()!*_~#\\@"}
+
+
 def _md(v, limit: int = 200) -> str:
-    return html.escape(_text(v, limit), quote=True).replace("|", "&#124;").replace("`", "&#96;")
+    """Escape for Markdown: HTML entities for everything that can start a link, image, heading, emphasis or
+    tag, and a broken '://' / 'www.' so nothing becomes an autolink."""
+    t = "".join(_MD_ESCAPE.get(ord(ch)) or html.escape(ch, quote=True) for ch in _text(v, limit))
+    t = t.replace("|", "&#124;").replace("`", "&#96;").replace("://", "&#58;&#47;&#47;")
+    return re.sub(r"(?i)www\.", lambda m: m.group(0)[:-1] + "&#46;", t)
 
 
 def _counts(out: dict) -> dict:
@@ -693,7 +788,7 @@ _VERDICT_COLOR = {"PASS": "1;32", "FAIL": "1;31", "INCOMPLETE": "1;35"}
 def _term(v, limit: int = 200) -> str:
     if isinstance(v, (list, tuple)):
         v = ", ".join(str(x) for x in v)
-    v = " ".join(_TERM_BAD.sub(" ", str(v if v is not None else "")).split())
+    v = " ".join(_TERM_BAD.sub(" ", sg_guard.sanitize_untrusted(v, 1 << 30)).split())
     return v[:limit] + ("\u2026" if len(v) > limit else "")
 
 
@@ -951,7 +1046,8 @@ def main() -> int:
         with github_fetch.scan_workspace(a.keep_workspace) as ws:
             try:
                 fr = github_fetch.fetch_repo(gref, ws)
-                out = run_scan(fr.path, a.offline, a.environment)
+                out = run_scan(fr.path, a.offline, a.environment,
+                               [("HEAD commit message", "git:HEAD", fr.commit_subject)])
                 out["repository"] = f"{gref.display}@{fr.commit[:7]}"
                 out["source"] = {"type": "github", "url": f"https://github.com/{gref.owner}/{gref.repo}",
                                  "ref": fr.branch, "commit": fr.commit}
