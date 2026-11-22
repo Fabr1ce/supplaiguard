@@ -66,8 +66,8 @@ SupplAIGuard is built *with* Kiro and *on* Kiro, and each Kiro feature maps to a
 | **Skills** | Reusable procedures such as OSV lookup and verification (`.kiro/skills/`) |
 | **Hooks** | Analyze on manifest change, verify after a write, and an independent review on a different model after each task (`.kiro/hooks/`) |
 | **MCP** | The demo MCP server and the MCP configs the tool audits |
-| **Kiro CLI headless** | Planned: runs the same agents in GitHub Actions |
-| **Kiro Crew** | Planned: a maintainer-side steward that triages what CI learns |
+| **Kiro CLI headless** | Experimental: runs triage in GitHub Actions (`self-scan.yml`, `demo-triage.yml`), plus an optional propose-fix job that opens a draft PR |
+| **Kiro Crew** | Planned (no code yet): a maintainer-side steward that triages what CI learns |
 
 Kiro Powers aren't used yet. This is our reading of why the pieces fit together, not a
 benchmark against other coding agents.
@@ -87,7 +87,7 @@ flowchart LR
     ok{{"YOU approve<br/>every file write"}}
     r["3 Remediate<br/>Remediation agent"]
     v["4 Verify<br/>Verification agent<br/>PASS, FAIL or NEEDS_REVIEW"]
-    l["5 Learn<br/>local history<br/>CI loop planned"]
+    l["5 Learn<br/>local history<br/>opt-in CI report, untested"]
     scan[["Deterministic scanner<br/>rules + OSV.dev"]]
     rev["Reviewer agent<br/>different model, read-only"]
 
@@ -226,7 +226,8 @@ jobs:
   is never treated as clean. Results go to the job summary and a downloadable HTML report.
 - **Suppressions** come from the pull request's *base* commit, so a PR cannot hide its own findings.
 - **Dependabot PRs** are scanned like any other PR, so the result describes the dependencies after the update.
-- **Agent triage** (Kiro CLI headless) is experimental, off by default and not yet tested with a real key.
+- **Agent triage** (Kiro CLI headless) is experimental and off by default. It has run live twice with a real key (task 20.6a: the first run failed on the
+  install step, the second passed), but its output has had little review.
   It runs in an empty directory with read-only tools, because headless Kiro loads the workspace's agents,
   steering and MCP config without a trust prompt.
 - This repository scans its own `.kiro/` with the same workflow (`.github/workflows/self-scan.yml`).
@@ -236,7 +237,7 @@ jobs:
   because headless Kiro starts workspace MCP servers without a prompt and the demos contain insecure ones (an unpinned
   `npx` package with `autoApprove: *`). The agent can still read those files as data, and the scanner runs on the
   untouched original. Read-only tools, no shell, output printed in the job log and uploaded as an artifact.
-  **Optional `propose-fix` input (off by default, experimental, not yet run):** a separate job lets the Remediation
+  **Optional `propose-fix` input (off by default, experimental, never run on GitHub):** a separate job lets the Remediation
   agent edit a copy of the demo and opens a **draft pull request** for a person to review. The agent only proposes.
   `scanner/fix_gate.py` decides what may change, with no model involved: only `package.json`, `requirements*.txt`,
   agent and skill files and MCP config (never source, secrets, workflows or `.git`, and no symlinks). The lockfile is
@@ -251,7 +252,7 @@ jobs:
   The same run publishes the results to **GitHub Pages**, so nobody needs a GitHub login or Actions access to read
   them: a page per demo with the scanner's HTML report and the agent's triage text (escaped, shown as plain text; a
   skipped or failed triage is stated on the page). The run page also shows the findings table in its job summary.
-  Not yet run. One-time setup: *Settings > Pages > Source: GitHub Actions*, then run the workflow.
+  Used by the demo site since the Pages commits in PR #6 and #7. One-time setup: *Settings > Pages > Source: GitHub Actions*, then run the workflow.
 
 **Live results (for judges, no login):** https://fabr1ce.github.io/supplaiguard/ (appears after the first run of the
 *Demo triage* workflow; before that it returns 404).
@@ -261,7 +262,7 @@ jobs:
   It never includes source, config excerpts, secrets, paths, component names or your repository name. A fix counts
   only if the scan after the merge was complete. It uses a GitHub App token limited to this repository, and a
   maintainer reviews the PR; nothing auto-merges. Setup is in `examples/consumer-report-fix.yml`. Not yet run against
-  a real merged fix PR, and nothing yet turns the reports into rule changes (R17.2, R17.5).
+  a real merged fix PR (task 25.2), and nothing yet turns the reports into rule changes (R17.2, R17.5).
 
 ```mermaid
 flowchart LR
@@ -272,8 +273,8 @@ flowchart LR
         sc["Deterministic scanner<br/>no secrets, never runs repo code<br/>suppressions read from the base commit"]
         gate{"Gate<br/>0 pass, 1 findings,<br/>2 scan incomplete"}
         tri["Agent triage, experimental, off by default<br/>Kiro CLI headless in an empty directory<br/>read-only tools, deny rules"]
-        fix["Fix PR on its own branch<br/>re-scanned before it opens<br/>planned"]
-        evo["Sanitized report of a merged fix<br/>rule ids, counts, outcomes only<br/>opt-in, untested"]
+        fix["Fix PR on its own branch<br/>re-scanned before it opens<br/>optional propose-fix job, never run"]
+        evo["Sanitized report of a merged fix<br/>rule ids, counts, outcomes only<br/>opt-in report-fix.yml, untested"]
     end
 
     sum(["Job summary and HTML report"])
@@ -293,7 +294,8 @@ flowchart LR
     classDef core fill:#dff5e1,stroke:#3a9d4f,color:#222
     classDef exp fill:#ffe8d6,stroke:#e07b39,color:#222,stroke-dasharray:5 4
     class human,maint human
-    class fix,evo,rules planned
+    class rules planned
+    class fix,evo exp
     class sc,gate,wf core
     class tri exp
 ```
@@ -384,8 +386,8 @@ python3 scanner/sg_scan.py /path/to/repo --learn-report # what has been learned 
 ```
 
 Learn is advisory: it never changes findings or exit codes. Commit the history file or add it to
-`.gitignore`, as you prefer. Still planned: the opt-in CI loop that sends sanitised patterns back to this repo
-as pull requests, and a Kiro Crew steward that triages them (see the spec, R17).
+`.gitignore`, as you prefer. The opt-in CI report (`report-fix.yml`, `scanner/evolution_report.py`) exists but has not run on a real merged fix.
+Still planned: turning those reports into rule changes, and a Kiro Crew steward that triages them (see the spec, R17).
 
 ## Running a scan (local)
 
