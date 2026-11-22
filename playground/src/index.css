@@ -45,3 +45,30 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Laboratory atmosphere. All motion is slow: no element flashes more than once every 5 seconds.
+   Under prefers-reduced-motion the rule above removes every animation, leaving the static glow. */
+.lab-bolt { opacity: 0; animation: lab-bolt var(--lab-period, 12s) ease-out infinite; animation-delay: var(--lab-delay, 0s); }
+@keyframes lab-bolt {
+  0%, 90%, 100% { opacity: 0; }
+  92% { opacity: var(--lab-peak, 0.5); }
+}
+.lab-flash { animation: lab-flash var(--lab-period, 12s) ease-out infinite; }
+@keyframes lab-flash {
+  0%, 90%, 100% { opacity: var(--lab-base, 0.5); }
+  92% { opacity: calc(var(--lab-base, 0.5) + 0.3); }
+}
+.lab-breathe { animation: lab-breathe 7s ease-in-out infinite; }
+@keyframes lab-breathe { 50% { opacity: calc(var(--lab-base, 0.5) * 0.7); } }
+.lab-alive { animation: lab-alive 2.4s ease-out 1 both; }
+@keyframes lab-alive { 0% { opacity: 0; } 12% { opacity: 0.55; } 100% { opacity: 0.28; } }
+.lab-arc { stroke-dasharray: 6 5; animation: lab-arc 1.6s linear infinite; }
+@keyframes lab-arc { to { stroke-dashoffset: -22; } }
+.lab-pulse { animation: lab-pulse 2.6s ease-in-out infinite; }
+@keyframes lab-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(143 211 107 / 0), inset 0 0 0 1px rgb(143 211 107 / 0.25); }
+  50% { box-shadow: 0 0 18px 0 rgb(143 211 107 / 0.28), inset 0 0 0 1px rgb(162 101 255 / 0.55); }
+}
+.lab-fade { animation: lab-fade 0.9s ease-out both; }
+@keyframes lab-fade { from { opacity: 0; } to { opacity: 1; } }
+.lab-pulse-static { box-shadow: 0 0 14px 0 rgb(143 211 107 / 0.22), inset 0 0 0 1px rgb(162 101 255 / 0.5); }

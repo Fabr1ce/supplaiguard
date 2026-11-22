@@ -49,7 +49,7 @@ export default function WorkflowTimeline({ jobs, started }: { jobs: Job[]; start
     <ol className="space-y-1" aria-label="Execution timeline">
       {!started && <li className="mb-2 text-sm text-warn">Waiting for GitHub to start the run…</li>}
       {stages.map((s) => (
-        <li key={s.key} className="flex gap-3 rounded-lg p-2">
+        <li key={s.key} className={`flex gap-3 rounded-lg p-2 ${s.state === "active" ? "lab-pulse lab-pulse-static" : ""}`} aria-current={s.state === "active" ? "step" : undefined}>
           <span className="mt-0.5">{ICON[s.state]}</span>
           <div>
             <p className="text-sm font-medium">{s.label} <span className="ml-1 text-xs font-normal text-mute">{WORD[s.state]}</span></p>

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import demos from "../data/demos.json";
 import type { Demo } from "../types/demo";
 import { useExecution } from "../hooks/useExecution";
@@ -7,20 +7,29 @@ import ExecutionHeader from "../components/execution/ExecutionHeader";
 import ExecutionDetails from "../components/execution/ExecutionDetails";
 import WorkflowTimeline from "../components/execution/WorkflowTimeline";
 import AgentActivity from "../components/execution/AgentActivity";
+import LabAtmosphere, { type LabMode } from "../components/execution/LabAtmosphere";
+import FlavorTicker from "../components/execution/FlavorTicker";
+import { currentFlavor, doneKeys, intensityFor } from "../services/flavor";
 
 export default function Execution() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { execution, error } = useExecution(id);
+  const [q] = useSearchParams();
+  // Dev-only preview: #/run/x?demo=sim[&end=failure|cancelled][&fix=1]. Always null in production builds.
+  const sim = import.meta.env.DEV && q.get("demo") === "sim" ? { end: q.get("end") ?? "success", fix: q.get("fix") === "1" } : null;
+  const { execution, error } = useExecution(id, sim);
   const demo = (demos as Demo[]).find((d) => d.id === execution?.demoId);
   const done = execution?.status === "completed";
 
   useEffect(() => {
-    if (done && execution?.conclusion === "success") {
+    if (done && execution?.conclusion === "success" && !sim) {
       const t = setTimeout(() => nav(`/run/${id}/results`), 2500);
       return () => clearTimeout(t);
     }
-  }, [done, execution?.conclusion, id, nav]);
+  }, [done, execution?.conclusion, id, nav]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const flavor = currentFlavor(execution?.status, execution?.conclusion, execution?.jobs ?? []);
+  const mode: LabMode | null = !execution ? null : flavor.status === "success" ? "alive" : done ? "cold" : "active";
 
   if (error && !execution) {
     return (
@@ -34,7 +43,13 @@ export default function Execution() {
 
   return (
     <div className="space-y-5">
+      {mode && <LabAtmosphere mode={mode} intensity={intensityFor(flavor.key)} />}
       <ExecutionHeader demo={demo} execution={execution} id={id ?? ""} />
+      {execution && (
+        <div className="glass px-5 py-3">
+          <FlavorTicker stepKey={flavor.key} status={flavor.status} done={doneKeys(execution.jobs)} />
+        </div>
+      )}
       {error && <p role="alert" className="text-sm text-warn">Connection problem: {error.message} Retrying…</p>}
       {execution?.conclusion === "failed_to_start" && (
         <p role="alert" className="rounded-xl border border-bad/50 bg-bad/10 p-4 text-sm text-bad">GitHub did not start a run for this launch. Nothing was executed. You can launch again.</p>
