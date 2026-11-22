@@ -204,3 +204,21 @@ def test_verification_may_only_read_which_branch_and_commit_it_checked():
     """R20.6: Verification states the branch and commit; its git access stays exact read-only strings."""
     git = [p for p in patterns("verification", "shell", "allow") if p.startswith("git")]
     assert set(git) == {"git branch --show-current", "git rev-parse --short HEAD"}, git
+
+
+# ---- untrusted repository text (spec scan-github-repo, G8; OWASP Agentic ASI01 / ASI06)
+ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize("prompt", sorted((AGENTS_DIR / "prompts").glob("*.md")), ids=lambda p: p.stem)
+def test_every_agent_prompt_declares_repo_text_untrusted(prompt):
+    text = prompt.read_text().lower()
+    assert "untrusted input" in text and "never instructions" in text
+
+
+def test_demo_triage_feeds_the_agent_only_wrapped_scanner_output():
+    wf = (ROOT / ".github" / "workflows" / "demo-triage.yml").read_text()
+    assert "wrap_untrusted" in wf
+    assert "findings.untrusted.txt" in wf
+    assert 'cp "$RUNNER_TEMP/out/findings.json" "$work/findings.json"' not in wf
+    assert "./findings.json" not in wf

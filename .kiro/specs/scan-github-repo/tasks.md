@@ -11,7 +11,7 @@ Requirement ids refer to `requirements.md`. The open questions are answered (see
   - [x] 2.2 Call the guard from `parse_github_ref`; unit and hypothesis tests (`test_sg_guard.py`)
   - [x] 2.3 Injection detector wired into the scan as `suspicious_agent_skill` findings, incl. file names and HEAD commit message
   - [x] 2.4 Escaped reports, no state written from repo text, injection findings never clean; tests
-  - [ ] 2.5 Harden `demo-triage.yml` and any agent prompt to consume `wrap_untrusted` data; policy test
+  - [x] 2.5 Harden `demo-triage.yml` and any agent prompt to consume `wrap_untrusted` data; policy test
   - [ ] 2.6 Re-verify ASI names against genai.owasp.org when online and fix the table in `design.md`
 - [ ] 3. Fetch (G2)
   - [x] 3.1 Decision: hardened `git clone` chosen, tarball not prototyped offline (recorded in `design.md`)
