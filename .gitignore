@@ -22,3 +22,5 @@ assets/build_logo.py
 # Private keys and certificates (GitHub App keys live in playground/worker; never commit them)
 *.pem
 *.key
+*.swp
+*.swo
