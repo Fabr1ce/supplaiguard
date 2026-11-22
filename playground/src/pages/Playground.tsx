@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Eye, Radar, ShieldCheck, Sparkles, X } from "lucide-react";
+import { Eye, GitPullRequestDraft, GraduationCap, Radar, RefreshCw, ShieldCheck, Sparkles, X } from "lucide-react";
 import demos from "../data/demos.json";
 import type { Demo } from "../types/demo";
 import DemoGrid from "../components/demos/DemoGrid";
@@ -79,21 +79,24 @@ export default function Playground() {
 
       <section id="how" aria-labelledby="how-h" className="scroll-mt-20">
         <h2 id="how-h" className="mb-4 text-xl font-semibold">How it works</h2>
-        <div className="grid gap-4 md:grid-cols-3">
+        <ol className="grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3">
           {[
             { Icon: Radar, t: "1. Scan", d: "The deterministic scanner checks dependencies against OSV.dev and MCP configs and agent files against fixed rules. Same input, same result." },
             { Icon: Eye, t: "2. Analyze", d: "A Kiro agent, read-only and without shell access, connects findings across files and says what it could not determine." },
             { Icon: ShieldCheck, t: "3. Read the results", d: "You see the real findings. A run that finishes does not mean anything was fixed: by default this workflow changes no code." },
+            { Icon: GitPullRequestDraft, t: "4. Remediate", d: "Optional and off by default. The Remediation agent proposes the smallest fix on a copy of the demo, limited to manifests, agent and MCP config. A fixed check confirms nothing else changed, then a draft pull request opens. A person reviews it. Nothing merges automatically." },
+            { Icon: RefreshCw, t: "5. Verify", d: "The changed copy is scanned again, and the draft pull request lists that re-check. Tests are not run, so a person still decides." },
+            { Icon: GraduationCap, t: "6. Learn", d: "Opt-in only. After a person merges a fix, a sanitized report (rule ids, severities, counts, outcome; no source, secrets, paths or repository names) goes upstream as a pull request for a maintainer to review." },
           ].map(({ Icon, t, d }) => (
-            <div key={t} className="glass p-5">
+            <li key={t} className="glass p-5">
               <Icon className="h-6 w-6 text-purple" aria-hidden />
               <h3 className="mt-2 font-semibold">{t}</h3>
               <p className="mt-1 text-sm text-mute">{d}</p>
-            </div>
+            </li>
           ))}
-        </div>
+        </ol>
         <p className="mt-4 flex items-start gap-2 text-sm text-mute"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-green" aria-hidden />
-          The full SupplAIGuard loop (propose a fix, approve it, re-scan to verify) needs a developer's approval. When the service allows it, the toggle above can request a draft pull request for a person to review; it never merges anything.</p>
+          The full loop needs a developer's approval. When the service allows it, the toggle above can request a draft pull request for a person to review. It never merges anything, and reports never change rules by themselves.</p>
       </section>
     </div>
   );
