@@ -18,6 +18,12 @@ PER_CLIENT_LAUNCHES_PER_HOUR = "3"
 PROPOSE_FIX_ENABLED = "false"
 PROPOSE_FIX_DAILY_CAP = "3"
 PROPOSE_FIX_PER_CLIENT_PER_DAY = "1"
+# Scan a public GitHub repository by URL from the Playground. OFF unless exactly "true". No secrets needed beyond
+# the existing GitHub App; see the README "Scan By URL Flag". Tighter limits than normal launches.
+SCAN_URL_ENABLED = "false"
+SCAN_URL_DAILY_CAP = "5"
+SCAN_URL_PER_CLIENT_PER_DAY = "1"
+SCAN_URL_WORKFLOW_FILE = "scan-repo.yml"
 
 [[durable_objects.bindings]]
 name = "COORDINATOR"
@@ -42,6 +48,10 @@ PER_CLIENT_LAUNCHES_PER_HOUR = "3"
 PROPOSE_FIX_ENABLED = "false"
 PROPOSE_FIX_DAILY_CAP = "3"
 PROPOSE_FIX_PER_CLIENT_PER_DAY = "1"
+SCAN_URL_ENABLED = "false"
+SCAN_URL_DAILY_CAP = "5"
+SCAN_URL_PER_CLIENT_PER_DAY = "1"
+SCAN_URL_WORKFLOW_FILE = "scan-repo.yml"
 [[env.dev.durable_objects.bindings]]
 name = "COORDINATOR"
 class_name = "Coordinator"
