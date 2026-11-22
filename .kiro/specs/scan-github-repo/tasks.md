@@ -7,17 +7,17 @@ Requirement ids refer to `requirements.md`. The open questions are answered (see
   - [x] 1.2 Unit tests for accepted and rejected inputs, plus the hypothesis property test
 - [ ] 2. Agentic security guard (G8)
   - [x] 2.0 Spec: G8, Decisions, ASI01-ASI10 table, clone-vs-tarball decision
-  - [ ] 2.1 `scanner/sg_guard.py`: `validate_user_string`, `sanitize_untrusted`, `detect_injection`, `wrap_untrusted`
-  - [ ] 2.2 Call the guard from `parse_github_ref`; unit and hypothesis tests (`test_sg_guard.py`)
+  - [x] 2.1 `scanner/sg_guard.py`: `validate_user_string`, `sanitize_untrusted`, `detect_injection`, `wrap_untrusted`
+  - [x] 2.2 Call the guard from `parse_github_ref`; unit and hypothesis tests (`test_sg_guard.py`)
   - [ ] 2.3 Injection detector wired into the scan as `suspicious_agent_skill` findings, incl. file names and HEAD commit message
   - [ ] 2.4 Escaped reports, no state written from repo text, injection findings never clean; tests
   - [ ] 2.5 Harden `demo-triage.yml` and any agent prompt to consume `wrap_untrusted` data; policy test
   - [ ] 2.6 Re-verify ASI names against genai.owasp.org when online and fix the table in `design.md`
 - [ ] 3. Fetch (G2)
   - [x] 3.1 Decision: hardened `git clone` chosen, tarball not prototyped offline (recorded in `design.md`)
-  - [ ] 3.2 Implement `fetch_repo` with timeout, size limit, isolated environment and error mapping
-  - [ ] 3.3 Workspace context manager with cleanup on exit, exception and SIGINT
-  - [ ] 3.4 Tests against a local bare repo: success, bad ref, timeout, too large, hook not run, symlink escape
+  - [x] 3.2 Implement `fetch_repo` with timeout, size limit, isolated environment and error mapping
+  - [x] 3.3 Workspace context manager with cleanup on exit, exception and SIGINT
+  - [x] 3.4 Tests against a local bare repo: success, bad ref, timeout, too large, hook not run, symlink escape
 - [ ] 4. CLI integration (G1.3, G3)
   - [ ] 4.1 Add `--github`, `--ref`, `--keep-workspace` to `sg_scan.py`; reject `--github` combined with a positional repo
   - [ ] 4.2 Set `repository` and optional `source` in the output; accept `source` in `validate_scan`
