@@ -8,6 +8,10 @@
 *Prevent locally. Detect continuously. Remediate intelligently. Verify automatically.*
 
 <p align="center">
+  <img src="assets/social-preview.gif" alt="Animated SupplAIGuard social preview showing the Discover, Analyze, Remediate, Verify, Learn security loop" width="760">
+</p>
+
+<p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2ea44f?style=for-the-badge"></a>
   <img alt="Kiroween 2026: Frankenstein" src="https://img.shields.io/badge/Kiroween%202026-Frankenstein-ff7518?style=for-the-badge">
   <img alt="Built with Kiro" src="https://img.shields.io/badge/built%20with-Kiro-8e44ff?style=for-the-badge">
