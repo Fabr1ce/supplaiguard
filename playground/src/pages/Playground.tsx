@@ -37,7 +37,7 @@ export default function Playground() {
   return (
     <div className="space-y-10">
       <section className="pt-6 text-center">
-        <img src={`${import.meta.env.BASE_URL}banner.gif`} width={960} height={540} alt="SupplAIGuard: a stitched green and purple ghost-shield inside a five-step loop" className="mx-auto mb-6 h-auto w-full max-w-[760px] rounded-2xl" />
+        <img src={`${import.meta.env.BASE_URL}banner.gif`} width={800} height={400} alt="SupplAIGuard: a stitched green and purple ghost-shield inside a five-step loop" className="mx-auto mb-6 h-auto w-full max-w-[760px] rounded-2xl" />
         <p className="text-sm text-green">SupplAIGuard Security Playground</p>
         <motion.h1 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mx-auto mt-2 max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">
           Watch AI <span className="shimmer">find it</span>. See what it <span className="shimmer">reports</span>.

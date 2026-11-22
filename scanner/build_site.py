@@ -25,7 +25,7 @@ RULE_OK = re.compile(r"^[A-Z]{3}-\d{3}$")
 SEVERITIES = ("critical", "high", "medium", "low")
 ACRONYMS = {"ai": "AI", "mcp": "MCP", "ci": "CI"}
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
-DEFAULT_BANNER = ASSETS / "social-preview-rounded.gif"
+DEFAULT_BANNER = ASSETS / "banner-rounded.gif"
 DEFAULT_MARK = ASSETS / "site-mark.svg"
 
 # Brand colours come from the logo: dark violet ground, green, purple and orange accents.
