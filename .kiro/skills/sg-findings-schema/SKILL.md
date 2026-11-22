@@ -19,9 +19,27 @@ malformed findings object were valid.
   "generated_at": "ISO-8601 timestamp",
   "scanner_version": "string — optional, set by sg_scan.py",
   "findings": [ /* Finding objects */ ],
-  "errors": [ /* optional ScanError objects */ ]
+  "errors": [ /* optional ScanError objects */ ],
+  "source": { "type": "github", "url": "https://github.com/OWNER/REPO", "ref": "branch/tag or null", "commit": "40-char sha" },
+  "coverage": { "files_scanned": { "mcp_json": 0, "agent_configs": 0, "skills": 0, "lockfiles": 0, "requirements": 0 } }
 }
 ```
+
+### Optional top-level fields
+
+- `source` — present only when the scan target was fetched from GitHub
+  (`sg_scan.py --github`). Keys are exactly `type`, `url`, `ref`, `commit`; unknown
+  keys are rejected. `type` MUST be `"github"`, `url` MUST start with
+  `https://github.com/` and carry no credentials, `commit` MUST match
+  `^[0-9a-f]{40}$`, `ref` is a string or `null`. `repository` is then
+  `github.com/OWNER/REPO@<first 7 of commit>`.
+- `coverage` — what the scanner recognised: `files_scanned` maps each kind
+  (`mcp_json`, `agent_configs`, `skills`, `lockfiles`, `requirements`) to a
+  non-negative integer. When every count is 0 the report MUST say that nothing
+  recognised was scanned and MUST NOT claim the repository is safe.
+- A failed fetch is reported as an `errors` entry (`source: "github.fetch"`) with
+  empty `findings`; it is never a clean result. Hitting a scan limit (symlinks
+  outside the repo, oversized files, file count) is one `scanner/limits` error.
 
 ## Finding object
 
@@ -124,4 +142,5 @@ Before emitting a scan object, confirm:
 - [ ] Dependency findings include `current_version` and `recommended_version`.
 - [ ] AI-component findings include a valid `rule_id` and quoted `evidence`.
 - [ ] No malicious/suspicious claim lacks evidence.
+- [ ] If present, `source` and `coverage` follow the optional-field rules above.
 - [ ] Output is valid JSON (parseable by `jq`).

@@ -7,7 +7,7 @@ emits the findings schema from the sg-findings-schema skill. Exact checks
 results are reproducible; the LLM agents are reserved for triage, semantic SKL
 review, and remediation.
 
-Usage: sg_scan.py [REPO] [--offline] [--pretty] [--format auto|text|json|md|html]
+Usage: sg_scan.py [REPO | --github OWNER/REPO|URL [--ref REF] [--keep-workspace]] [--offline] [--pretty] [--format auto|text|json|md|html]
                   [--fail-on low|medium|high|critical] [--environment local|ci]
                   [--out-dir DIR] [--suppressions FILE] [--history [FILE]] [--phase analysis|verification]
        sg_scan.py [REPO] --learn-report [FILE] [--format text|json]
@@ -39,6 +39,8 @@ NO_RULE_ID = {"vulnerable_dependency", "malicious_package_indicator"}
 OSV_BATCH = "https://api.osv.dev/v1/querybatch"
 OSV_VULN = "https://api.osv.dev/v1/vulns/"
 SKIP_DIRS = {"node_modules", ".git", ".venv", "venv", "__pycache__"}
+MAX_FILES = 50000
+MAX_FILE_BYTES = 5 * 1024 * 1024
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "[::1]", "0.0.0.0")
 SECRET_KEY = re.compile(r"(key|token|secret|password|passwd|credential|authorization)", re.I)
 ENV_REF = re.compile(r"^\$\{?\w+\}?$")
@@ -64,6 +66,8 @@ class Scan:
         self.repo = repo
         self.findings: list[dict] = []
         self.errors: list[dict] = []
+        self.limits = {"symlinks": 0, "oversized": 0, "truncated": False}
+        self.coverage = {"mcp_json": 0, "agent_configs": 0, "skills": 0, "lockfiles": 0, "requirements": 0}
 
     def add(self, **f):
         f["id"] = f"SG-{len(self.findings) + 1:03d}"
@@ -83,20 +87,65 @@ def rel(scan: Scan, p: Path) -> str:
         return str(p)
 
 
+def read_capped(p: Path, root: Path | None = None, errors: str = "strict") -> str:
+    """Read a text file, refusing anything outside `root` (when given) or larger than MAX_FILE_BYTES."""
+    if root is not None:
+        real = p.resolve()
+        if real != root.resolve() and root.resolve() not in real.parents:
+            raise OSError("path resolves outside the repository")
+    if p.stat().st_size > MAX_FILE_BYTES:
+        raise OSError(f"file larger than {MAX_FILE_BYTES} bytes")
+    return p.read_text(errors=errors)
+
+
 def load_json(scan: Scan, p: Path, stage: str):
     try:
-        return json.loads(p.read_text())
+        return json.loads(read_capped(p, scan.repo))
     except (OSError, ValueError) as e:
         scan.error(rel(scan, p), stage, f"unparseable: {e}")
         return None
 
 
-def walk(repo: Path, names: set[str] | None = None, suffix: str | None = None):
-    for p in repo.rglob("*"):
-        if any(part in SKIP_DIRS for part in p.parts) or not p.is_file():
-            continue
-        if (names is None and suffix is None) or (names and p.name in names) or (suffix and p.name.endswith(suffix)):
-            yield p
+def walk(repo: Path, names: set[str] | None = None, suffix: str | None = None, stats: dict | None = None):
+    """Yield regular files under `repo`. Never follows symlinks out of the repo, skips oversized files
+    and stops after MAX_FILES. Counts of what was skipped are added to `stats` when given."""
+    stats = stats if stats is not None else {"symlinks": 0, "oversized": 0, "truncated": False}
+    root = Path(os.path.realpath(repo))
+    seen = 0
+
+    def inside(real: str) -> bool:
+        return real == str(root) or real.startswith(str(root) + os.sep)
+
+    for dirpath, dirnames, filenames in os.walk(repo, followlinks=False):
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+        for d in dirnames:  # a symlinked dir is never descended into; count the ones that leave the repo
+            full = os.path.join(dirpath, d)
+            if os.path.islink(full) and not inside(os.path.realpath(full)):
+                stats["symlinks"] += 1
+        for fn in sorted(filenames):
+            full = os.path.join(dirpath, fn)
+            if os.path.islink(full):
+                real = os.path.realpath(full)
+                if not inside(real):
+                    stats["symlinks"] += 1
+                    continue
+                if not os.path.isfile(real):
+                    continue
+            elif not os.path.isfile(full):
+                continue
+            try:
+                if os.stat(full).st_size > MAX_FILE_BYTES:
+                    stats["oversized"] += 1
+                    continue
+            except OSError:
+                continue
+            if seen >= MAX_FILES:
+                stats["truncated"] = True
+                return
+            seen += 1
+            p = Path(full)
+            if (names is None and suffix is None) or (names and fn in names) or (suffix and fn.endswith(suffix)):
+                yield p
 
 
 # ---------------------------------------------------------------- MCP rules
@@ -213,7 +262,18 @@ def scan_agent(scan: Scan, p: Path):
     prompt = agent.get("prompt") or ""
     if prompt.startswith("file://"):
         pf = (p.parent / prompt[7:]).resolve()
-        prompt = pf.read_text() if pf.is_file() else ""
+        root = scan.repo.resolve()
+        if pf != root and root not in pf.parents:
+            scan.error(src, "threat_analysis", "prompt file:// path points outside the repository; it was not read")
+            prompt = ""
+        elif pf.is_file():
+            try:
+                prompt = read_capped(pf, root)
+            except OSError as e:
+                scan.error(src, "threat_analysis", f"prompt file could not be read safely: {e}")
+                prompt = ""
+        else:
+            prompt = ""
     scan_skl(scan, name, src, prompt)
 
 
@@ -253,7 +313,7 @@ def http_json(url: str, body: dict | None = None):
 def requirements_packages(p: Path) -> dict[str, str]:
     """Pinned `name==version` lines of a requirements*.txt (unpinned lines are skipped)."""
     out: dict[str, str] = {}
-    for line in p.read_text(errors="ignore").splitlines():
+    for line in read_capped(p, errors="ignore").splitlines():
         m = re.match(r"^\s*([A-Za-z0-9_.\-]+)(?:\[[^\]]*\])?\s*==\s*([A-Za-z0-9_.\-+!]+)", line)
         if m:
             out[m.group(1).lower().replace("_", "-")] = m.group(2)
@@ -316,23 +376,50 @@ def run_scan(repo: Path, offline: bool = False, environment: str | None = None) 
         except Exception as e:  # noqa: BLE001
             scan.error(rel(scan, p), stage, f"could not be processed safely ({type(e).__name__}); not analysed")
 
-    for p in walk(repo, {"mcp.json"}):
-        guarded("threat_analysis", p, scan_mcp, scan, p)
-    for p in walk(repo, suffix=".json"):
-        if p.parent.name == "agents" and p.parent.parent.name == ".kiro":
+    files = list(walk(repo, stats=scan.limits))
+    cov = scan.coverage
+    for p in files:
+        if p.name == "mcp.json":
+            cov["mcp_json"] += 1
+            guarded("threat_analysis", p, scan_mcp, scan, p)
+    for p in files:
+        if p.name.endswith(".json") and p.parent.name == "agents" and p.parent.parent.name == ".kiro":
+            cov["agent_configs"] += 1
             guarded("threat_analysis", p, scan_agent, scan, p)
-    for p in walk(repo, {"SKILL.md"}):
-        guarded("threat_analysis", p, lambda p=p: scan_skl(scan, p.parent.name, rel(scan, p), p.read_text(errors="ignore")))
-    for p in walk(repo, {"package-lock.json"}):
-        guarded("threat_analysis", p, scan_deps, scan, p, offline)
-    for p in walk(repo):
-        if re.fullmatch(r"requirements[\w.\-]*\.txt", p.name):
+    for p in files:
+        if p.name == "SKILL.md":
+            cov["skills"] += 1
+            guarded("threat_analysis", p, lambda p=p: scan_skl(scan, p.parent.name, rel(scan, p),
+                                                                read_capped(p, repo, errors="ignore")))
+    for p in files:
+        if p.name == "package-lock.json":
+            cov["lockfiles"] += 1
             guarded("threat_analysis", p, scan_deps, scan, p, offline)
+    for p in files:
+        if re.fullmatch(r"requirements[\w.\-]*\.txt", p.name):
+            cov["requirements"] += 1
+            guarded("threat_analysis", p, scan_deps, scan, p, offline)
+    lim = scan.limits
+    if lim["symlinks"] or lim["oversized"] or lim["truncated"]:
+        msg = f"skipped {lim['symlinks']} symlink(s) outside the repo, {lim['oversized']} oversized file(s)"
+        if lim["truncated"]:
+            msg += f"; stopped after {MAX_FILES} files"
+        scan.error("scanner/limits", "discovery", msg)
     now = datetime.now(timezone.utc)
     env = environment or ("ci" if os.environ.get("GITHUB_ACTIONS") == "true" else "local")
     return {"repository": repo.name, "scan_id": now.strftime("scan-%Y%m%d-%H%M%S"), "environment": env,
             "generated_at": now.isoformat(timespec="seconds"), "scanner_version": VERSION,
-            "findings": scan.findings, "errors": scan.errors}
+            "findings": scan.findings, "errors": scan.errors,
+            "coverage": {"files_scanned": dict(scan.coverage)}}
+
+
+def run_scan_failed(repository: str, environment: str | None, source: str, message: str) -> dict:
+    """A scan that could not start (e.g. the fetch failed): no findings, one error, so never clean."""
+    now = datetime.now(timezone.utc)
+    env = environment or ("ci" if os.environ.get("GITHUB_ACTIONS") == "true" else "local")
+    return {"repository": repository, "scan_id": now.strftime("scan-%Y%m%d-%H%M%S"), "environment": env,
+            "generated_at": now.isoformat(timespec="seconds"), "scanner_version": VERSION, "findings": [],
+            "errors": [{"source": source, "stage": "discovery", "message": message}]}
 
 
 def exit_code(out: dict, fail_on: str = "low") -> int:
@@ -351,6 +438,26 @@ def validate_scan(out: dict) -> list[str]:
             bad.append(f"missing top-level field: {k}")
     if out.get("environment") not in ("local", "ci"):
         bad.append(f"environment must be local|ci, got {out.get('environment')!r}")
+    if "source" in out:
+        src = out["source"]
+        if not isinstance(src, dict):
+            bad.append("source must be an object")
+        else:
+            for k in sorted(set(src) - {"type", "url", "ref", "commit"}, key=str):
+                bad.append(f"source: unknown key {k!r}")
+            if src.get("type") != "github":
+                bad.append(f"source.type must be 'github', got {src.get('type')!r}")
+            if not (isinstance(src.get("url"), str) and src["url"].startswith("https://github.com/")):
+                bad.append("source.url must start with https://github.com/")
+            if not (isinstance(src.get("commit"), str) and re.fullmatch(r"[0-9a-f]{40}", src["commit"])):
+                bad.append("source.commit must be a 40-char lowercase hex sha")
+            if src.get("ref") is not None and not isinstance(src.get("ref"), str):
+                bad.append("source.ref must be a string or null")
+    if "coverage" in out:
+        fs = out["coverage"].get("files_scanned") if isinstance(out["coverage"], dict) else None
+        if not (isinstance(fs, dict) and all(isinstance(v, int) and not isinstance(v, bool) and v >= 0
+                                             for v in fs.values())):
+            bad.append("coverage.files_scanned must be an object of non-negative integers")
     ids = set()
     for f in out.get("findings", []):
         fid = f.get("id", "?")
@@ -475,13 +582,25 @@ def _counts(out: dict) -> dict:
     return c
 
 
+NOTHING_RECOGNISED = ("No findings, but nothing recognised was found to scan (looked for mcp.json, "
+                      ".kiro/agents/*.json, SKILL.md, package-lock.json, requirements*.txt). "
+                      "This is not a statement that the repository is safe.")
+
+
+def _nothing_recognised(out: dict) -> bool:
+    fs = (out.get("coverage") or {}).get("files_scanned")
+    return isinstance(fs, dict) and all(v == 0 for v in fs.values())
+
+
 def _status(out: dict) -> tuple[str, str]:
     if out.get("errors"):
         return "INCOMPLETE", "The scan did not finish cleanly, so this is NOT a clean result."
     if out.get("findings"):
         return "FINDINGS", f"{len(out['findings'])} finding(s) need attention."
-    if out.get("suppressed"):
+    if out.get("suppressed") and not _nothing_recognised(out):
         return "CLEAN", f"No open findings; {len(out['suppressed'])} suppressed with recorded reasons (listed below)."
+    if _nothing_recognised(out):
+        return "CLEAN", NOTHING_RECOGNISED
     return "CLEAN", "No findings."
 
 
@@ -628,6 +747,8 @@ def render_text(out: dict, fail_on: str = "low", color: bool = False, width: int
     if suppressed and findings:
         L.append(f"SUPPRESSED {pl(len(suppressed), 'reviewed false positive')}, listed below")
     L.append(f"ERRORS    {pl(len(errors), 'scan error')}" if errors else "ERRORS    none")
+    if _nothing_recognised(out):
+        L.append(row("COVERAGE", NOTHING_RECOGNISED))
 
     if errors:
         L += ["", "SCAN ERRORS (the result above cannot be trusted as clean)"]
@@ -773,7 +894,11 @@ def render_learn(s: dict) -> str:
 # ---------------------------------------------------------------- main
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("repo", nargs="?", default=".")
+    ap.add_argument("repo", nargs="?", default=None, help="local directory to scan (default: .)")
+    ap.add_argument("--github", metavar="REF", help="scan a public GitHub repo: OWNER/REPO or https://github.com/OWNER/REPO "
+                    "(shallow clone into a private temp dir; nothing from it is executed)")
+    ap.add_argument("--ref", help="branch or tag to scan with --github (default: the repo's default branch)")
+    ap.add_argument("--keep-workspace", action="store_true", help="with --github, keep the temp clone and print its path")
     ap.add_argument("--offline", action="store_true", help="skip OSV lookups (reported as an error)")
     ap.add_argument("--pretty", action="store_true", help="indent JSON output")
     ap.add_argument("--format", choices=("auto", "text", "json", "md", "html"), default="auto",
@@ -792,8 +917,22 @@ def main() -> int:
                     help=f"summarise the history (default: REPO/{HISTORY_DEFAULT}) instead of scanning; exits 0")
     a = ap.parse_args()
 
+    def usage_error(msg: str) -> int:
+        print(f"sg_scan: error: {msg}", file=sys.stderr)
+        return 2
+
+    if a.github is not None and a.repo is not None:
+        return usage_error("--github cannot be combined with a local REPO path")
+    if (a.ref or a.keep_workspace) and a.github is None:
+        return usage_error("--ref and --keep-workspace need --github")
+    if a.github is not None and a.learn_report is not None:
+        return usage_error("--learn-report works on a local history, not with --github")
+    if a.github is not None and a.history == "":
+        return usage_error("--history needs an explicit FILE with --github (never written into the clone)")
+    local = Path(a.repo if a.repo is not None else ".")
+
     if a.learn_report is not None:
-        path = Path(a.learn_report) if a.learn_report else Path(a.repo) / HISTORY_DEFAULT
+        path = Path(a.learn_report) if a.learn_report else local / HISTORY_DEFAULT
         if not path.is_file():
             print(f"No history yet at {path}. Scans add to it with --history.")
             return 0
@@ -801,7 +940,29 @@ def main() -> int:
         print(json.dumps(summary, indent=2) if a.format == "json" else render_learn(summary))
         return 0
 
-    out = run_scan(Path(a.repo), a.offline, a.environment)
+    branch = commit = None
+    if a.github is not None:
+        import github_fetch  # sibling module, stdlib only; imported late so local scans do not need it
+        import sg_guard
+        try:
+            gref = github_fetch.parse_github_ref(a.github, a.ref)
+        except (github_fetch.InvalidGithubRef, sg_guard.GuardError) as e:
+            return usage_error(sg_guard.sanitize_untrusted(str(e), max_len=200) or "invalid GitHub reference")
+        with github_fetch.scan_workspace(a.keep_workspace) as ws:
+            try:
+                fr = github_fetch.fetch_repo(gref, ws)
+                out = run_scan(fr.path, a.offline, a.environment)
+                out["repository"] = f"{gref.display}@{fr.commit[:7]}"
+                out["source"] = {"type": "github", "url": f"https://github.com/{gref.owner}/{gref.repo}",
+                                 "ref": fr.branch, "commit": fr.commit}
+                branch, commit = fr.branch, fr.commit[:7]
+            except github_fetch.FetchError as e:
+                out = run_scan_failed(gref.display, a.environment,
+                                      "github.fetch", sg_guard.sanitize_untrusted(str(e), max_len=300))
+            if a.keep_workspace:
+                print(f"sg_scan: workspace kept at {ws}", file=sys.stderr)
+    else:
+        out = run_scan(local, a.offline, a.environment)
     if a.suppressions:
         supps, serrs = load_suppressions(Path(a.suppressions))
         out["errors"].extend(serrs)
@@ -810,10 +971,10 @@ def main() -> int:
     if problems:  # a malformed scan object is a scanner bug: surface it, never pass it on as valid
         out["errors"].append({"source": "scanner", "stage": "validation", "message": "; ".join(problems[:5])})
     if a.history is not None:
-        path = Path(a.history) if a.history else Path(a.repo) / HISTORY_DEFAULT
+        path = Path(a.history) if a.history else local / HISTORY_DEFAULT
         try:
             prior, _ = read_history(path)
-            rec = history_record(out, prior, a.phase, *git_info(Path(a.repo)))
+            rec = history_record(out, prior, a.phase, *((branch, commit) if a.github is not None else git_info(local)))
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a") as fh:
                 fh.write(json.dumps(rec, separators=(",", ":")) + "\n")

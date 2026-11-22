@@ -19,14 +19,14 @@ Requirement ids refer to `requirements.md`. The open questions are answered (see
   - [x] 3.3 Workspace context manager with cleanup on exit, exception and SIGINT
   - [x] 3.4 Tests against a local bare repo: success, bad ref, timeout, too large, hook not run, symlink escape
 - [ ] 4. CLI integration (G1.3, G3)
-  - [ ] 4.1 Add `--github`, `--ref`, `--keep-workspace` to `sg_scan.py`; reject `--github` combined with a positional repo
-  - [ ] 4.2 Set `repository` and optional `source` in the output; accept `source` in `validate_scan`
-  - [ ] 4.3 Fetch failures become `errors` entries and a non-clean exit; add a test that a failed fetch is never "clean"
-  - [ ] 4.4 Update the `sg-findings-schema` skill for the optional `source` field
+  - [x] 4.1 Add `--github`, `--ref`, `--keep-workspace` to `sg_scan.py`; reject `--github` combined with a positional repo
+  - [x] 4.2 Set `repository` and optional `source` in the output; accept `source` in `validate_scan`
+  - [x] 4.3 Fetch failures become `errors` entries and a non-clean exit; add a test that a failed fetch is never "clean"
+  - [x] 4.4 Update the `sg-findings-schema` skill for the optional `source` field
 - [ ] 5. Scan limits (G2.5, G6.1)
-  - [ ] 5.1 Inspect how collectors walk the tree; add file count, file size and symlink guards
-  - [ ] 5.2 Report truncation as a `scanner/limits` error entry; tests for each limit
-  - [ ] 5.3 Report text for "no supported files found" (G3.5)
+  - [x] 5.1 Inspect how collectors walk the tree; add file count, file size and symlink guards
+  - [x] 5.2 Report truncation as a `scanner/limits` error entry; tests for each limit
+  - [x] 5.3 Report text for "no supported files found" (G3.5)
 - [ ] 6. GitHub Actions dispatch (G7 option B)
   - [ ] 6.1 Add `.github/workflows/scan-repo.yml` with `workflow_dispatch` inputs `repo` and `ref`, passed via `env:`
   - [ ] 6.2 Upload `report.html` and `findings.json` as artifacts; write `summary.md` to the job summary
