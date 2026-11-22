@@ -16,7 +16,7 @@ export default function ExecutionHistory({ runs }: { runs: StoredRun[] }) {
         <tbody>
           {runs.map((r) => (
             <tr key={r.launchId} className="border-t border-line/60">
-              <td className="p-3">{(demos as Demo[]).find((d) => d.id === r.demoId)?.name ?? r.demoId}</td>
+              <td className="p-3">{(demos as Demo[]).find((d) => d.id === r.demoId)?.name ?? (r.demoId === "scan-url" ? "Repository scan" : r.demoId)}</td>
               <td className="p-3 font-mono text-xs">{r.launchId}</td>
               <td className="p-3 text-mute">{time(r.createdAt)}</td>
               <td className="p-3">{OUTCOME_LABEL[outcome(r.status, r.conclusion)]}</td>

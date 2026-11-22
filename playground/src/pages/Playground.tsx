@@ -5,8 +5,9 @@ import { Eye, GitPullRequestDraft, GraduationCap, Radar, RefreshCw, ShieldCheck,
 import demos from "../data/demos.json";
 import type { Demo } from "../types/demo";
 import DemoGrid from "../components/demos/DemoGrid";
+import ScanUrlCard from "../components/demos/ScanUrlCard";
 import ProposeFixToggle from "../components/demos/ProposeFixToggle";
-import { ApiError, apiConfigured, canProposeFix, getHealth, launchDemo } from "../services/api";
+import { ApiError, apiConfigured, canProposeFix, canScanUrl, getHealth, launchDemo, launchRepo } from "../services/api";
 import { activeRun, fromExecution, introSeen, loadRuns, markIntroSeen, saveRun } from "../services/storage";
 
 export default function Playground() {
@@ -14,13 +15,24 @@ export default function Playground() {
   const [launching, setLaunching] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fixAvailable, setFixAvailable] = useState(false);
+  const [scanUrlAvailable, setScanUrlAvailable] = useState(false); // off until /api/health says otherwise
   const [proposeFix, setProposeFix] = useState(false); // off by default, never remembered
   const [intro, setIntro] = useState(!introSeen());
   const runs = useMemo(loadRuns, []);
   const active = activeRun();
 
   useEffect(() => {
-    if (apiConfigured) getHealth().then((h) => setFixAvailable(canProposeFix(h))).catch(() => setFixAvailable(false));
+    if (apiConfigured) {
+      getHealth()
+        .then((h) => {
+          setFixAvailable(canProposeFix(h));
+          setScanUrlAvailable(canScanUrl(h));
+        })
+        .catch(() => {
+          setFixAvailable(false);
+          setScanUrlAvailable(false);
+        });
+    }
   }, []);
 
   const onLaunch = async (demoId: string) => {
@@ -31,6 +43,21 @@ export default function Playground() {
       const r = await launchDemo(demoId, fixAvailable && proposeFix);
       const now = new Date().toISOString();
       saveRun({ launchId: r.launchId, demoId, createdAt: now, status: "queued", conclusion: null });
+      nav(`/run/${r.launchId}`);
+    } catch (e) {
+      const err = e as ApiError;
+      setError(err.retryAfter && err.status === 429 ? `${err.message} Try again in about ${Math.ceil(err.retryAfter / 60)} min.` : err.message);
+      setLaunching(null);
+    }
+  };
+
+  const onLaunchRepo = async (repo: string, ref: string | null) => {
+    if (launching) return; // duplicate-launch guard
+    setError(null);
+    setLaunching("scan-url");
+    try {
+      const r = await launchRepo(repo, ref);
+      saveRun({ launchId: r.launchId, demoId: "scan-url", createdAt: new Date().toISOString(), status: "queued", conclusion: null });
       nav(`/run/${r.launchId}`);
     } catch (e) {
       const err = e as ApiError;
@@ -77,6 +104,8 @@ export default function Playground() {
         <DemoGrid demos={demos as Demo[]} runs={runs} launchingId={launching} onLaunch={onLaunch} blocked={blocked} />
       </section>
 
+      {scanUrlAvailable && <ScanUrlCard onLaunch={onLaunchRepo} launching={launching === "scan-url"} blocked={launching && launching !== "scan-url" ? "Another launch is starting." : blocked} />}
+
       <section id="how" aria-labelledby="how-h" className="scroll-mt-20">
         <h2 id="how-h" className="mb-4 text-xl font-semibold">How it works</h2>
         <ol className="grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3">
@@ -96,7 +125,7 @@ export default function Playground() {
           ))}
         </ol>
         <p className="mt-4 flex items-start gap-2 text-sm text-mute"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-green" aria-hidden />
-          The full loop needs a developer's approval. When the service allows it, the toggle above can request a draft pull request for a person to review. It never merges anything, and reports never change rules by themselves.</p>
+          When the service allows it, a separate card can also scan a public repository you name, with the scanner only. The full loop needs a developer's approval. When the service allows it, the toggle above can request a draft pull request for a person to review. It never merges anything, and reports never change rules by themselves.</p>
       </section>
     </div>
   );

@@ -6,18 +6,19 @@ import type { Job } from "../types/execution";
  * References come from the public-domain novel and general gothic laboratory tropes.
  */
 
-export type StepKey = "queued" | "prepare" | "scan" | "copy" | "triage" | "fix" | "publish" | "unknown";
+export type StepKey = "queued" | "prepare" | "scan" | "fetchscan" | "copy" | "triage" | "fix" | "publish" | "unknown";
 export type FlavorStatus = "running" | "complete" | "success" | "failure" | "cancelled";
 
 /** Order of the real workflow, used to scale the lightning. Higher means a stronger storm. */
 export const STEP_INTENSITY: Record<StepKey, number> = {
-  queued: 0.15, prepare: 0.3, scan: 0.45, copy: 0.6, triage: 0.8, fix: 0.88, publish: 0.95, unknown: 0.5,
+  queued: 0.15, prepare: 0.3, scan: 0.45, fetchscan: 0.5, copy: 0.6, triage: 0.8, fix: 0.88, publish: 0.95, unknown: 0.5,
 };
 
 export const STEP_LABEL: Record<StepKey, string> = {
   queued: "Waiting for GitHub",
   prepare: "Preparing the run",
   scan: "Deterministic scan",
+  fetchscan: "Fetch and scan the repository",
   copy: "Copy the demo",
   triage: "Kiro triage",
   fix: "Propose fix",
@@ -47,6 +48,14 @@ export const RUNNING: Record<StepKey, string[]> = {
     "Reading every stitch of the dependency list",
     "Testing each bolt on the neck for rust",
     "Checking the creature's notes for strange ink",
+  ],
+  // Scan by URL (scan-repo.yml). One real step does both the shallow clone and the scan, so the lines cover both and none claims either finished.
+  fetchscan: [
+    "Sending the carriage to fetch the specimen",
+    "The specimen is read where it lies, never woken",
+    "Nothing from the specimen is allowed to move",
+    "Counting every torch and bolt in the village",
+    "Reading the notes in the margins, with gloves on",
   ],
   copy: [
     "Fetching the specimen",
@@ -91,6 +100,7 @@ export const STEP_DONE: Record<StepKey, string> = {
   queued: "Step complete: the storm has arrived",
   prepare: "Step complete: the laboratory is ready",
   scan: "Step complete: every torch has been counted",
+  fetchscan: "Step complete: the scanner has run",
   copy: "Step complete: the specimen is on the slab",
   triage: "Step complete: the agents have spoken",
   fix: "Step complete: the stitches are in place",
@@ -147,6 +157,13 @@ export function statusLine(stepKey: string, status: FlavorStatus): string {
 /** Maps a real GitHub job and step name (see demo-triage.yml) to a step key. */
 export function stepKeyFor(jobName: string, stepName?: string): StepKey {
   if (/^propose/i.test(jobName)) return "fix";
+  if (/^scan$/i.test(jobName)) {
+    // scan-repo.yml: the single job "scan".
+    if (!stepName) return "prepare";
+    if (/^Scan$/.test(stepName)) return "fetchscan";
+    if (/^(Publish job summary|Upload report|Gate)/.test(stepName)) return "publish";
+    return "prepare";
+  }
   if (/^(publish|deploy)/i.test(jobName)) return "publish";
   if (/^triage/i.test(jobName)) {
     if (!stepName) return "prepare";
