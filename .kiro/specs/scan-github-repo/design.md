@@ -1,7 +1,7 @@
 # Design: Scan a GitHub repository by URL
 
-Status: exploration. Recommendation: build option A (CLI flag) first, then B (Actions dispatch) as a thin wrapper.
-Option C only if the open questions in `requirements.md` say a hosted demo is required.
+Status: decided. Build option A (CLI flag) first, then B (Actions dispatch) as a thin wrapper. Option C is not built
+(see Decisions in `requirements.md`). Input validation and the prompt-injection guard (G8) are specified below.
 
 ## Components
 
@@ -82,7 +82,7 @@ github.com and api.osv.dev, returns the report, and keeps nothing after the resp
 | SSRF through redirects to internal hosts | `protocol.allow=never` plus https only, host fixed to github.com |
 | Credential leakage | No tokens, isolated `HOME`, no credential helper |
 | Temp data left behind | Context-managed cleanup, 0700 |
-| Prompt injection in the target's agent files | Findings quote the text as data. Not applicable to the CLI path because no LLM reads it. If the agent pipeline is later run on it, treat contents as untrusted |
+| Prompt injection in the target's agent files or in user-supplied strings | See the agentic security guard (G8): validation, `detect_injection`, `wrap_untrusted`, no model reads repo text in the CLI path |
 
 ## Testing
 
@@ -96,8 +96,65 @@ github.com and api.osv.dev, returns the report, and keeps nothing after the resp
 - Integration test, marked `network`, that scans a known small public repo and checks the report header.
 - Existing property tests and the self-scan must still pass.
 
-## Open design questions
+## Agentic security guard (G8)
 
-- Whether to use `git clone` or GitHub's tarball API (`/repos/{o}/{r}/tarball/{ref}`). Tarball avoids git config and
-  hooks entirely and is simpler to size-limit by streaming, but counts against the unauthenticated API rate limit
-  (60/hour per IP). Prototype both in task 2 and pick one.
+New stdlib-only module `scanner/sg_guard.py`. It is pure (no network, no subprocess) and is the only place that decides
+whether a string is acceptable or how untrusted text is neutralized.
+
+### API
+
+- `validate_user_string(value, kind) -> str`: `kind` is one of `url`, `ref`, `repo`. NFKC and ASCII-only check,
+  rejection of control, bidi, zero-width, tag characters, percent-encoding, IDN or `xn--` hosts and newlines, length
+  caps, and instruction-like text. Raises `InvalidUserInput` naming the rule. `parse_github_ref` calls it first.
+- `sanitize_untrusted(text, max_len=200) -> str`: strips control, bidi, zero-width and tag characters, collapses
+  whitespace, truncates. Used for evidence, terminal output and anything shown to an agent.
+- `detect_injection(text) -> list[Match]`: deterministic patterns only (no model). Each match has a rule id
+  (`SKL-001`, `SKL-002`, `SKL-005` style), the sanitized quoted excerpt and a confidence. Detected hidden characters
+  count as a heuristic match.
+- `wrap_untrusted(text, label) -> str`: sanitizes the text and wraps it in a fixed delimiter block, for example
+  `<untrusted-data label="README.md"> ... </untrusted-data>`, escaping any delimiter inside the text, with a
+  one-line reminder that the content is data and not instructions.
+
+### Trust boundary
+
+```
+user input ──> guard (validate) ──> fetch (hardened git) ──> scanner ──> reports (md/html/json, escaped)
+ URL, ref,      reject early,        https, github.com,      reads files,    sanitize_untrusted on every
+ CLI, inputs    no echo of raw       no hooks, caps          never runs      repo-derived string
+                                                              them
+                         scanner ──> detect_injection ──> suspicious_agent_skill findings
+scanner output ──> wrap_untrusted ──> demo-triage Kiro agent (read-only, deny rules, treats text as data)
+```
+
+Everything left of the guard is untrusted. Everything the scanner reads from the fetched repo is untrusted. The only
+component that could be steered by text is a downstream agent, so the only path to it goes through `wrap_untrusted`.
+
+### OWASP Top 10 for Agentic Applications mapping
+
+The ASI names below are written from memory. genai.owasp.org was not reachable offline when this was written, so the
+names, numbering and scope MUST be re-verified before the table is cited.
+
+| Id | Risk | Control in this feature | Test (file, name; to be added in the feature that implements it) |
+|---|---|---|---|
+| ASI01 | Agent Goal Hijack | Instruction-like text rejected in ref and repo (G8a). Repo text only reaches an agent as `wrap_untrusted` data (G8c). `detect_injection` flags goal-override text in README, SKILL.md, agent and MCP bodies, names and commit message (G8b) | `test_sg_guard.py::test_rejects_instruction_like_ref`, `test_sg_guard.py::test_detect_injection_rules`, `test_sg_guard.py::test_wrap_untrusted_escapes_delimiters` |
+| ASI02 | Tool Misuse and Exploitation | Git runs by argument list with `--` and a rebuilt URL, validated ref, hardened env. No shell. Scanner has no tool that executes repo content | `test_github_fetch.py::test_rejected_inputs`, `test_github_fetch.py::test_fetch_hook_not_run` |
+| ASI03 | Identity and Privilege Abuse | No tokens, isolated `HOME`, empty git config, no credential helper. Workflows use `contents: read` only and pass inputs via `env:` | `test_github_fetch.py::test_fetch_env_isolated`, `test_agent_policy.py` workflow permission checks |
+| ASI04 | Agentic Supply Chain Vulnerabilities | Host fixed to github.com over https, no submodules, LFS or tags, no mirrors. Only package coordinates go to OSV.dev. The scanner itself stays stdlib-only | `test_github_fetch.py::test_clone_url_rebuilt`, `test_github_fetch.py::test_fetch_argv_hardened` |
+| ASI05 | Unexpected Code Execution | Repo code is never executed: no install, build or script. Hooks disabled. Symlinks outside the workspace are not followed | `test_github_fetch.py::test_fetch_hook_not_run`, `test_github_fetch.py::test_symlink_escape_skipped` |
+| ASI06 | Memory and Context Poisoning | Nothing derived from untrusted content is written to suppressions, config or memory (G8d). Evidence is sanitized and truncated. History and report files hold escaped text only | `test_sg_guard.py::test_scan_writes_no_state_from_repo_text`, `test_sg_guard.py::test_sanitize_untrusted_strips_hidden_chars` |
+| ASI07 | Insecure Inter-Agent Communication | Not applicable in the CLI path: the scanner has no agent-to-agent channel. Closest control: the scanner-to-triage-agent hand-off is structured JSON (`sg-findings-schema`) plus `wrap_untrusted` delimiters | `test_sg_guard.py::test_wrap_untrusted_escapes_delimiters`, `test_properties.py` schema validation |
+| ASI08 | Cascading Failures | Per-collector `guarded()` isolation, timeout, size, file-count and per-file caps, truncation reported as `scanner/limits` error, fetch failure is an error, never clean (G8e) | `test_github_fetch.py::test_fetch_failure_not_clean`, `test_sg_scan_limits.py::test_truncation_reported` |
+| ASI09 | Human-Agent Trust Exploitation | Reports escape repo text (Markdown, HTML, terminal) so a repo cannot forge a verdict or a fix suggestion. Findings show quoted evidence and rule id. Injection findings are never labeled clean | `test_sg_guard.py::test_report_escapes_repo_text`, `test_sg_guard.py::test_injection_finding_not_clean` |
+| ASI10 | Rogue Agents | Not applicable: the scanner starts no autonomous agent and the feature is read-only (G5). Closest control: the demo-triage agent is read-only with deny rules, and remediation is not offered for a fetched repo | `test_agent_policy.py` (deny rules and read-only agents) |
+
+Test names are the planned names. FEAT-002 to FEAT-005 create them and may adjust a name, in which case this table is
+updated in the same commit.
+
+### Clone versus tarball decision
+
+Chosen: hardened `git clone` (shallow, single branch, hooks disabled, isolated env, https only). Reason: it matches how
+a developer would fetch the code, gives the commit SHA directly, and does not depend on the API rate limit. The
+tarball API (`/repos/{o}/{r}/tarball/{ref}`) avoids git config and hooks and is easy to size-limit while streaming, but
+unauthenticated calls are limited to 60 per hour per IP. It was not prototyped because there is no network in the
+build environment. It stays a documented alternative.
+
