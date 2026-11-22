@@ -135,6 +135,20 @@ jobs:
           echo "outcome=$outcome" >> "$GITHUB_ENV"
           { echo "### Sanitized fix report (outcome: $outcome)"; echo '```json'; cat "$RUNNER_TEMP/report.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Derive the owner and repository name
+        if: ${{ env.approved == 'true' && env.outcome == 'fixed' }}
+        id: target
+        env:
+          SG_REPO: ${{ inputs.sg-repository }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$SG_REPO" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$ ]]; then
+            echo "sg-repository must look like owner/name" >&2
+            exit 1
+          fi
+          printf 'owner=%s\n' "${SG_REPO%%/*}" >> "$GITHUB_OUTPUT"
+          printf 'repo=%s\n' "${SG_REPO#*/}" >> "$GITHUB_OUTPUT"
+
       - name: Create a token limited to the SupplAIGuard repository
         if: ${{ env.approved == 'true' && env.outcome == 'fixed' }}
         id: app
@@ -142,8 +156,8 @@ jobs:
         with:
           app-id: ${{ secrets.SG_APP_ID }}
           private-key: ${{ secrets.SG_APP_PRIVATE_KEY }}
-          owner: ${{ split(inputs.sg-repository, '/')[0] }}
-          repositories: ${{ split(inputs.sg-repository, '/')[1] }}
+          owner: ${{ steps.target.outputs.owner }}
+          repositories: ${{ steps.target.outputs.repo }}
           permission-contents: write
           permission-pull-requests: write
 
