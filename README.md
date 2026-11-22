@@ -286,6 +286,42 @@ flowchart LR
     class tri exp
 ```
 
+## Scan any public GitHub repo
+
+```bash
+python scanner/sg_scan.py --github owner/name                 # or https://github.com/owner/name
+python scanner/sg_scan.py --github owner/name --ref v1.2.0    # a branch or tag
+python scanner/sg_scan.py --github owner/name --out-dir out   # also write findings.json, summary.md, report.html
+```
+
+Or in GitHub Actions: **Actions > Scan a public GitHub repo > Run workflow**, with inputs `repo` and `ref`
+(`.github/workflows/scan-repo.yml`). The report is the job summary plus the `supplaiguard-report` artifact.
+The output names the target as `github.com/owner/name@<commit7>` and `findings.json` gets a `source` object
+(`type`, `url`, `ref`, `commit`).
+
+**Limits and defaults.** Shallow clone of one branch (`--depth 1`, no tags, no submodules), 120 s timeout,
+200 MB size limit, at most 50,000 files, files over 5 MB skipped, symlinks that leave the clone are not
+followed. Hitting any limit is reported as a scan error, so a truncated scan is never shown as clean.
+Exit codes: 0 clean, 1 findings, 2 invalid input or scan error (fetch failures included).
+**Not supported:** private repositories (no tokens are used), hosts other than github.com, scanning by commit SHA.
+
+**Security model (OWASP Top 10 for Agentic Applications, 2026).** The repository you scan is hostile input.
+
+| Risk | Control |
+|---|---|
+| ASI01 Agent Goal Hijack | Strict input validation (`scanner/sg_guard.py`: allow-list, no instruction-like text, no hidden characters). A prompt-injection detector flags override text in README, SKILL.md, agent and MCP files, file names and the HEAD commit message as `suspicious_agent_skill`. Repo text reaches an agent only wrapped by `wrap_untrusted`. |
+| ASI02 Tool Misuse | `git` runs from an argument list with no shell, a rebuilt URL and a validated ref. |
+| ASI03 Identity and Privilege Abuse | No tokens, isolated `HOME`, empty git config, `contents: read` only. |
+| ASI04 Supply Chain | github.com over https only, no submodules, scanner is standard library only, only package names and versions go to OSV.dev. |
+| ASI05 Unexpected Code Execution | Nothing from the repository is installed, built or run. Git hooks are disabled. |
+| ASI06 Memory and Context Poisoning | No state is written from repo text. Evidence is sanitized and truncated. |
+| ASI07 Inter-Agent Communication | Not applicable to the CLI. The triage hand-off is structured and wrapped. |
+| ASI08 Cascading Failures | Timeouts, size limits, per-collector isolation. Any failure is an error, never a clean result. |
+| ASI09 Human Trust Exploitation | Reports escape repo text (HTML, Markdown, terminal). An injection finding is never shown as clean. |
+| ASI10 Rogue Agents | Not applicable. No agent is started, and the feature is read-only. |
+
+Details and the test for each control: `.kiro/specs/scan-github-repo/design.md`.
+
 ## Phase 1 (this MVP): Kiro-native
 
 Phase 1 is built **entirely from Kiro primitives**, with no application code:

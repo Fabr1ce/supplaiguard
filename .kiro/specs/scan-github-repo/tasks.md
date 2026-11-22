@@ -31,9 +31,9 @@ Requirement ids refer to `requirements.md`. The open questions are answered (see
   - [x] 6.1 Add `.github/workflows/scan-repo.yml` with `workflow_dispatch` inputs `repo` and `ref`, passed via `env:`
   - [x] 6.2 Upload `report.html` and `findings.json` as artifacts; write `summary.md` to the job summary
   - [x] 6.3 Permissions: `contents: read` only
-- [ ] 7. Docs
-  - [ ] 7.1 README section: "Scan any public GitHub repo" with the CLI command and the Actions form
-  - [ ] 7.2 Document limits, defaults and what is not supported (private repos, other hosts)
+- [x] 7. Docs
+  - [x] 7.1 README section: "Scan any public GitHub repo" with the CLI command and the Actions form
+  - [x] 7.2 Document limits, defaults and what is not supported (private repos, other hosts)
 - [x] 8. Decision checkpoint
   - [x] 8.1 Decided: no option C (hosted form); CLI plus Actions only
 - [ ] 9. Verification
