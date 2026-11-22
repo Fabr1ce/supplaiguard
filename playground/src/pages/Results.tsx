@@ -7,6 +7,7 @@ import VulnerabilityCard from "../components/security/VulnerabilityCard";
 import RemediationSummary from "../components/security/RemediationSummary";
 import VerificationResults from "../components/security/VerificationResults";
 import ResultSummary from "../components/results/ResultSummary";
+import FixOutcomeCard from "../components/results/FixOutcomeCard";
 import ReportLinks from "../components/results/ReportLinks";
 import demos from "../data/demos.json";
 import type { Demo } from "../types/demo";
@@ -45,6 +46,7 @@ export default function Results() {
         <VerificationResults r={r} />
       </div>
       <RemediationSummary r={r} />
+      {r.fix && <FixOutcomeCard fix={r.fix} runUrl={r.runUrl} />}
       <section aria-labelledby="fl" className="glass p-5">
         <h2 id="fl" className="mb-3 text-lg font-semibold">Findings</h2>
         {r.findings.length ? <ul className="space-y-2">{r.findings.map((f) => <VulnerabilityCard key={f.id} f={f} />)}</ul> : <p className="text-sm text-mute">The scan reported no findings. If the scan did not finish, this page would say so; check the GitHub run.</p>}

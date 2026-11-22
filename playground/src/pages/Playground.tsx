@@ -1,27 +1,34 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Eye, Radar, ShieldCheck, Sparkles, X } from "lucide-react";
 import demos from "../data/demos.json";
 import type { Demo } from "../types/demo";
 import DemoGrid from "../components/demos/DemoGrid";
-import { ApiError, apiConfigured, launchDemo } from "../services/api";
+import ProposeFixToggle from "../components/demos/ProposeFixToggle";
+import { ApiError, apiConfigured, canProposeFix, getHealth, launchDemo } from "../services/api";
 import { activeRun, fromExecution, introSeen, loadRuns, markIntroSeen, saveRun } from "../services/storage";
 
 export default function Playground() {
   const nav = useNavigate();
   const [launching, setLaunching] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fixAvailable, setFixAvailable] = useState(false);
+  const [proposeFix, setProposeFix] = useState(false); // off by default, never remembered
   const [intro, setIntro] = useState(!introSeen());
   const runs = useMemo(loadRuns, []);
   const active = activeRun();
+
+  useEffect(() => {
+    if (apiConfigured) getHealth().then((h) => setFixAvailable(canProposeFix(h))).catch(() => setFixAvailable(false));
+  }, []);
 
   const onLaunch = async (demoId: string) => {
     if (launching) return; // duplicate-launch guard
     setError(null);
     setLaunching(demoId);
     try {
-      const r = await launchDemo(demoId);
+      const r = await launchDemo(demoId, fixAvailable && proposeFix);
       const now = new Date().toISOString();
       saveRun({ launchId: r.launchId, demoId, createdAt: now, status: "queued", conclusion: null });
       nav(`/run/${r.launchId}`);
@@ -66,6 +73,7 @@ export default function Playground() {
 
       <section aria-labelledby="demos">
         <h2 id="demos" className="mb-4 text-xl font-semibold">Choose a demo</h2>
+        {fixAvailable && <div className="mb-4"><ProposeFixToggle checked={proposeFix} onChange={setProposeFix} disabled={!!launching} /></div>}
         <DemoGrid demos={demos as Demo[]} runs={runs} launchingId={launching} onLaunch={onLaunch} blocked={blocked} />
       </section>
 
@@ -75,7 +83,7 @@ export default function Playground() {
           {[
             { Icon: Radar, t: "1. Scan", d: "The deterministic scanner checks dependencies against OSV.dev and MCP configs and agent files against fixed rules. Same input, same result." },
             { Icon: Eye, t: "2. Analyze", d: "A Kiro agent, read-only and without shell access, connects findings across files and says what it could not determine." },
-            { Icon: ShieldCheck, t: "3. Read the results", d: "You see the real findings. A run that finishes does not mean anything was fixed: this workflow changes no code." },
+            { Icon: ShieldCheck, t: "3. Read the results", d: "You see the real findings. A run that finishes does not mean anything was fixed: by default this workflow changes no code." },
           ].map(({ Icon, t, d }) => (
             <div key={t} className="glass p-5">
               <Icon className="h-6 w-6 text-purple" aria-hidden />
@@ -85,7 +93,7 @@ export default function Playground() {
           ))}
         </div>
         <p className="mt-4 flex items-start gap-2 text-sm text-mute"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-green" aria-hidden />
-          The full SupplAIGuard loop (propose a fix, approve it, re-scan to verify) needs a developer's approval and is not started from this page.</p>
+          The full SupplAIGuard loop (propose a fix, approve it, re-scan to verify) needs a developer's approval. When the service allows it, the toggle above can request a draft pull request for a person to review; it never merges anything.</p>
       </section>
     </div>
   );
