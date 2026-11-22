@@ -1,5 +1,8 @@
 name: Demo triage (headless Kiro inside the demo folders)
 
+# Lets the Playground Worker find the run it started (the dispatch response has no run id). Empty for manual runs.
+run-name: Demo triage ${{ inputs.demo }} ${{ inputs.launch_id }}
+
 # Manual only. Runs the SupplAIGuard threat-analysis agent headless INSIDE a copy of each demo folder, so the
 # agent sees a realistic repository (its own .kiro/agents, manifests, source) instead of an empty directory.
 #
@@ -25,7 +28,13 @@ on:
           - vulnerable-ai-app
           - haunted-storyteller
           - crypt-keeper-mcp
+          - seance-gateway
         default: all
+      launch_id:
+        description: Correlation id set by the Playground Worker. Leave empty for manual runs.
+        type: string
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -43,7 +52,7 @@ jobs:
           set -euo pipefail
           case "$DEMO" in
             all) echo 'demos=["vulnerable-ai-app","haunted-storyteller","crypt-keeper-mcp"]' >> "$GITHUB_OUTPUT" ;;
-            vulnerable-ai-app|haunted-storyteller|crypt-keeper-mcp) echo "demos=[\"$DEMO\"]" >> "$GITHUB_OUTPUT" ;;
+            vulnerable-ai-app|haunted-storyteller|crypt-keeper-mcp|seance-gateway) echo "demos=[\"$DEMO\"]" >> "$GITHUB_OUTPUT" ;;
             *) echo "::error::unknown demo"; exit 2 ;;
           esac
 
@@ -214,6 +223,27 @@ jobs:
           set -euo pipefail
           python scanner/build_site.py "$RUNNER_TEMP/in" "$RUNNER_TEMP/site" "$RUN_URL" "$(date -u +%Y-%m-%d)"
           test -s "$RUNNER_TEMP/site/index.html"
+
+      # The Playground (playground/) is served under /playground/ of the same Pages site. Rebuilt on every run so a
+      # results deploy never removes it. PLAYGROUND_API_URL is a repository variable (the Worker URL; not a secret).
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: playground/package-lock.json
+
+      - name: Build the Playground
+        working-directory: playground
+        env:
+          VITE_API_URL: ${{ vars.PLAYGROUND_API_URL }}
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm run build
+          mkdir -p "$RUNNER_TEMP/site/playground"
+          cp -R dist/. "$RUNNER_TEMP/site/playground/"
+          test -s "$RUNNER_TEMP/site/playground/index.html"
 
       - name: Upload the site
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

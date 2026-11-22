@@ -1,0 +1,344 @@
+[
+  {
+    "id": "vulnerable-ai-app",
+    "name": "Vulnerable AI App",
+    "description": "SupplAIGuard demo app with a seeded vulnerable dependency and insecure AI components.",
+    "categories": [
+      "Vulnerable dependency",
+      "Insecure MCP configuration",
+      "Excessive agent permissions",
+      "Suspicious agent instructions"
+    ],
+    "bySeverity": {
+      "high": 5,
+      "medium": 2,
+      "critical": 1
+    },
+    "scannerVersion": "0.2.0",
+    "findings": [
+      {
+        "id": "SG-001",
+        "type": "insecure_mcp_configuration",
+        "ruleId": "MCP-001",
+        "severity": "high",
+        "component": "demo-tools",
+        "source": ".kiro/settings/mcp.json",
+        "why": "Wildcard auto-approval removes the human-in-the-loop guard; any tool the server exposes runs without prompting.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-002",
+        "type": "insecure_mcp_configuration",
+        "ruleId": "MCP-003",
+        "severity": "medium",
+        "component": "demo-tools",
+        "source": ".kiro/settings/mcp.json",
+        "why": "Unpinned remote code can change under you; a compromised upstream executes locally.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-003",
+        "type": "insecure_mcp_configuration",
+        "ruleId": "MCP-005",
+        "severity": "high",
+        "component": "demo-tools",
+        "source": ".kiro/settings/mcp.json",
+        "why": "Secret committed to config; rotate and move to an env var.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-004",
+        "type": "excessive_tool_permissions",
+        "ruleId": "AGT-001",
+        "severity": "high",
+        "component": "overprivileged",
+        "source": ".kiro/agents/overprivileged.json",
+        "why": "Grants every tool, including write and shell, with no gating.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-005",
+        "type": "excessive_tool_permissions",
+        "ruleId": "AGT-004",
+        "severity": "high",
+        "component": "overprivileged",
+        "source": ".kiro/agents/overprivileged.json",
+        "why": "Combined shell and unrestricted write enables self-modifying and lateral actions.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-006",
+        "type": "suspicious_agent_skill",
+        "ruleId": "SKL-002",
+        "severity": "high",
+        "component": "overprivileged",
+        "source": ".kiro/agents/overprivileged.json",
+        "why": "Attempts to defeat the human-in-the-loop controls.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-007",
+        "type": "suspicious_agent_skill",
+        "ruleId": "SKL-005",
+        "severity": "medium",
+        "component": "overprivileged",
+        "source": ".kiro/agents/overprivileged.json",
+        "why": "Possible prompt-injection payload; flag for review.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-008",
+        "type": "vulnerable_dependency",
+        "ruleId": "",
+        "severity": "critical",
+        "component": "lodash",
+        "source": "package-lock.json",
+        "why": "",
+        "advisories": 9,
+        "currentVersion": "4.17.4",
+        "recommendedVersion": "4.18.0"
+      }
+    ]
+  },
+  {
+    "id": "haunted-storyteller",
+    "name": "Haunted Storyteller",
+    "description": "Agent factory: a Strands agent wired to local tools + the Crypt Keeper MCP server.",
+    "categories": [
+      "Vulnerable dependency",
+      "Insecure MCP configuration",
+      "Excessive agent permissions",
+      "Suspicious agent instructions"
+    ],
+    "bySeverity": {
+      "high": 7,
+      "medium": 3
+    },
+    "scannerVersion": "0.2.0",
+    "findings": [
+      {
+        "id": "SG-001",
+        "type": "insecure_mcp_configuration",
+        "ruleId": "MCP-001",
+        "severity": "high",
+        "component": "crypt-keeper",
+        "source": ".kiro/settings/mcp.json",
+        "why": "Wildcard auto-approval removes the human-in-the-loop guard; any tool the server exposes runs without prompting.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-002",
+        "type": "insecure_mcp_configuration",
+        "ruleId": "MCP-003",
+        "severity": "medium",
+        "component": "crypt-keeper",
+        "source": ".kiro/settings/mcp.json",
+        "why": "Unpinned remote code can change under you; a compromised upstream executes locally.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-003",
+        "type": "insecure_mcp_configuration",
+        "ruleId": "MCP-005",
+        "severity": "high",
+        "component": "crypt-keeper",
+        "source": ".kiro/settings/mcp.json",
+        "why": "Secret committed to config; rotate and move to an env var.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-004",
+        "type": "insecure_mcp_configuration",
+        "ruleId": "MCP-004",
+        "severity": "medium",
+        "component": "ghost-feed",
+        "source": ".kiro/settings/mcp.json",
+        "why": "Credentials and traffic are exposed in transit.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-005",
+        "type": "insecure_mcp_configuration",
+        "ruleId": "MCP-005",
+        "severity": "high",
+        "component": "ghost-feed",
+        "source": ".kiro/settings/mcp.json",
+        "why": "Secret committed to config; rotate and move to an env var.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-006",
+        "type": "excessive_tool_permissions",
+        "ruleId": "AGT-001",
+        "severity": "high",
+        "component": "ghostwriter",
+        "source": ".kiro/agents/ghostwriter.json",
+        "why": "Grants every tool, including write and shell, with no gating.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-007",
+        "type": "excessive_tool_permissions",
+        "ruleId": "AGT-004",
+        "severity": "high",
+        "component": "ghostwriter",
+        "source": ".kiro/agents/ghostwriter.json",
+        "why": "Combined shell and unrestricted write enables self-modifying and lateral actions.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-008",
+        "type": "suspicious_agent_skill",
+        "ruleId": "SKL-002",
+        "severity": "high",
+        "component": "ghostwriter",
+        "source": ".kiro/agents/ghostwriter.json",
+        "why": "Attempts to defeat the human-in-the-loop controls.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-009",
+        "type": "suspicious_agent_skill",
+        "ruleId": "SKL-004",
+        "severity": "high",
+        "component": "ghostwriter",
+        "source": ".kiro/agents/ghostwriter.json",
+        "why": "Secret disclosure.",
+        "advisories": 0,
+        "currentVersion": "",
+        "recommendedVersion": ""
+      },
+      {
+        "id": "SG-010",
+        "type": "vulnerable_dependency",
+        "ruleId": "",
+        "severity": "medium",
+        "component": "jinja2",
+        "source": "requirements.txt",
+        "why": "",
+        "advisories": 10,
+        "currentVersion": "3.1.2",
+        "recommendedVersion": "3.1.6"
+      }
+    ]
+  },
+  {
+    "id": "crypt-keeper-mcp",
+    "name": "Crypt Keeper MCP",
+    "description": "Halloween MCP server: a crypt of scary stories, curses and haunted places. SupplAIGuard demo with a seeded vulnerable dependency (minimist@1.2.0).",
+    "categories": [
+      "Vulnerable dependency"
+    ],
+    "bySeverity": {
+      "critical": 1
+    },
+    "scannerVersion": "0.2.0",
+    "findings": [
+      {
+        "id": "SG-001",
+        "type": "vulnerable_dependency",
+        "ruleId": "",
+        "severity": "critical",
+        "component": "minimist",
+        "source": "package-lock.json",
+        "why": "",
+        "advisories": 2,
+        "currentVersion": "1.2.0",
+        "recommendedVersion": "1.2.6"
+      }
+    ]
+  },
+  {
+    "id": "seance-gateway",
+    "name": "Séance Gateway",
+    "description": "DEMO ONLY. A small AI-agent gateway seeded with dependency and agent-config problems that need reasoning to fix. Do not deploy.",
+    "categories": [
+      "Vulnerable dependency"
+    ],
+    "bySeverity": {
+      "high": 3,
+      "critical": 1
+    },
+    "scannerVersion": "0.2.0",
+    "findings": [
+      {
+        "id": "SG-001",
+        "type": "vulnerable_dependency",
+        "ruleId": "",
+        "severity": "high",
+        "component": "js-yaml",
+        "source": "package-lock.json",
+        "why": "",
+        "advisories": 5,
+        "currentVersion": "3.14.1",
+        "recommendedVersion": "4.3.2"
+      },
+      {
+        "id": "SG-002",
+        "type": "vulnerable_dependency",
+        "ruleId": "",
+        "severity": "high",
+        "component": "jsonwebtoken",
+        "source": "package-lock.json",
+        "why": "",
+        "advisories": 3,
+        "currentVersion": "8.5.1",
+        "recommendedVersion": "9.0.0"
+      },
+      {
+        "id": "SG-003",
+        "type": "vulnerable_dependency",
+        "ruleId": "",
+        "severity": "high",
+        "component": "lodash",
+        "source": "package-lock.json",
+        "why": "",
+        "advisories": 4,
+        "currentVersion": "4.17.20",
+        "recommendedVersion": "4.18.0"
+      },
+      {
+        "id": "SG-004",
+        "type": "vulnerable_dependency",
+        "ruleId": "",
+        "severity": "critical",
+        "component": "minimist",
+        "source": "package-lock.json",
+        "why": "",
+        "advisories": 2,
+        "currentVersion": "0.0.10",
+        "recommendedVersion": "1.2.6"
+      }
+    ]
+  }
+]

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="SupplAIGuard logo: a stitched green and purple Frankenstein ghost-shield inside a five-step loop: Discover, Analyze, Remediate, Verify, Learn, then back to Discover" width="760">
+  <img src="assets/social-preview-rounded.gif" alt="Animated SupplAIGuard banner: a stitched green and purple Frankenstein ghost-shield inside a five-step loop: Discover, Analyze, Remediate, Verify, Learn, then back to Discover" width="760">
 </p>
 
 # SupplAIGuard

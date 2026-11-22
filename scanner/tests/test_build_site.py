@@ -80,13 +80,27 @@ def test_run_url_must_be_https_github(tmp_path):
 
 # ---- branding, flow, results, run button -------------------------------------------------------------------
 
-def test_logo_is_copied_and_used_on_every_page(tmp_path):
+def test_banner_and_mark_are_copied_and_used(tmp_path):
     src, out = tmp_path / "in", tmp_path / "site"
     make_demo(src, "a", triage="t", exit_code="0")
     bs.build(src, out, run_url=RUN, when="d")
-    assert (out / "logo.svg").read_text().startswith("<svg")
-    assert '<img src="logo.svg"' in (out / "index.html").read_text()
-    assert '<img src="../logo.svg"' in (out / "a" / "triage.html").read_text()
+    assert (out / "banner.gif").read_bytes().startswith(b"GIF")
+    assert (out / "mark.svg").read_text().startswith("<svg")
+    index = (out / "index.html").read_text()
+    triage = (out / "a" / "triage.html").read_text()
+    assert '<img src="banner.gif"' in index
+    assert '<a href="index.html"><img src="mark.svg"' in index
+    assert '<a href="../index.html"><img src="../mark.svg"' in triage
+    assert "banner.gif" not in triage
+
+
+def test_missing_brand_assets_degrade_gracefully(tmp_path):
+    src, out = tmp_path / "in", tmp_path / "site"
+    make_demo(src, "a", triage="t", exit_code="0")
+    bs.build(src, out, run_url=RUN, when="d", banner=tmp_path / "no.gif", mark=tmp_path / "no.svg")
+    index = (out / "index.html").read_text()
+    assert "<h1>SupplAIGuard Demo Results</h1>" in index
+    assert "banner.gif" not in index and "mark.svg" not in index
 
 
 def test_titles_use_capital_first_letters(tmp_path):
