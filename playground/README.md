@@ -48,6 +48,23 @@ or anything else is off. Nothing in a browser request can turn it on.
 and any `proposeFix` request is ignored. To also stop it at the source, leave the `propose-fix` workflow input alone (default false) or remove the
 `KIRO_API_KEY` secret (the job then fails before doing anything).
 
+## Laboratory Atmosphere
+
+While a run is queued or in progress, the Execution page gets a laboratory mood: a purple and green glow, occasional forked bolts behind the page, a slow arc between two electrodes, and a pulse on the running step. The storm grows as the run moves through its real steps. A successful run ends with a green "alive" glow. A failed or cancelled run fades to a dim, cold state with no celebration.
+
+A rotating line of Frankenstein flavour text (public-domain novel and general gothic tropes only) sits above the real status, for example "Deterministic scan: running". The flavour never replaces the status. The "It lives. Results are ready." line appears only when the real run conclusion is success, and a one-time "Step complete" line appears only for a step that really finished with success.
+
+Accessibility and safety:
+
+- The effects are decorative: `aria-hidden`, `pointer-events: none`, low opacity, and behind all content.
+- With `prefers-reduced-motion` all animation stops and only a static glow remains.
+- Each bolt flashes once every 8 to 20 seconds and no flash is a hard on/off cut, so the page stays far below 3 flashes per second.
+- Only the real status line is a polite live region. The rotating flavour text is hidden from screen readers.
+
+To edit the messages, change the catalogue in `src/services/flavor.ts` (`RUNNING`, `STEP_DONE`, `RUN_SUCCESS`, `RUN_FAILURE`, `RUN_CANCELLED`). Keep 4 to 6 running lines per step, 80 characters or fewer, no em dashes, and no words like "success", "passed" or "complete" outside the branches that earn them. `npm test` enforces these rules.
+
+To preview without a backend, run `npm run dev` and open `#/run/test?demo=sim`. Add `&end=failure` or `&end=cancelled` to see the cold ending, and `&fix=1` to include the propose-fix job. The simulator exists only in dev builds.
+
 ## Architecture
 
 ```
