@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { strToU8, zipSync } from "fflate";
-import { parseArtifact } from "../src/results";
+import { parseArtifact, parseFixArtifact } from "../src/results";
 
 const zip = (files: Record<string, string>) => zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, strToU8(v)])));
 
@@ -27,5 +27,32 @@ describe("parseArtifact", () => {
     const r = parseArtifact(zip({ "findings.json": "{not json" }));
     expect(r.findings).toEqual([]);
     expect(r.triage.exitCode).toBeNull();
+  });
+});
+
+describe("parseFixArtifact", () => {
+  const files = {
+    "gate.json": JSON.stringify({ changed: ["package.json"], major: [], added: [], secret: "no" }),
+    "report.json": JSON.stringify({ outcome: "improved", complete: true, fixed: [{ rule_id: "X", severity: "high", count: 2 }], remaining: [{ count: 1 }] }),
+    "pr-url.txt": "https://github.com/o/r/pull/12\n",
+    "fix.txt": "agent text must not pass",
+  };
+  it("passes on the draft PR link, the gate and the re-check only", () => {
+    const f = parseFixArtifact(zip(files), "o", "r");
+    expect(f).toEqual({
+      prUrl: "https://github.com/o/r/pull/12",
+      gate: { ran: true, changed: ["package.json"], major: [], added: [] },
+      recheck: { outcome: "improved", complete: true, cleared: 2, remaining: 1 },
+    });
+    expect(JSON.stringify(f)).not.toContain("agent text");
+  });
+  it.each(["https://evil.example/o/r/pull/1", "https://github.com/o/other/pull/1", "javascript:alert(1)", "https://github.com/o/r/pull/1/../../x", ""])(
+    "drops a PR url that is not a pull request of this repository: %j",
+    (u) => {
+      expect(parseFixArtifact(zip({ ...files, "pr-url.txt": u }), "o", "r").prUrl).toBeNull();
+    },
+  );
+  it("survives a missing or malformed artifact", () => {
+    expect(parseFixArtifact(zip({ "gate.json": "{no" }), "o", "r")).toEqual({ prUrl: null, gate: { ran: false, changed: [], major: [], added: [] }, recheck: null });
   });
 });

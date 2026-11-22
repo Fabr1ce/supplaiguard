@@ -1,7 +1,8 @@
 import type { Env } from "./env";
 import { DEMOS, isDemoId, LAUNCH_ID_RE } from "./demos";
 import { dispatch, findRun, getArtifactZip, getJobs, getRun, GitHubError } from "./github";
-import { parseArtifact } from "./results";
+import { parseArtifact, parseFixArtifact } from "./results";
+import { parseLaunchRequest } from "./validate";
 import type { LimitConfig } from "./limits";
 
 export { Coordinator } from "./coordinator";
@@ -44,8 +45,13 @@ function limitConfig(env: Env): LimitConfig {
     perClientPerHour: n(env.PER_CLIENT_LAUNCHES_PER_HOUR, 3),
     activeTtlMs: 25 * 60_000,
     retainMs: 7 * 24 * 3_600_000,
+    proposeFixDailyCap: n(env.PROPOSE_FIX_DAILY_CAP ?? "", 3),
+    proposeFixPerClientPerDay: n(env.PROPOSE_FIX_PER_CLIENT_PER_DAY ?? "", 1),
   };
 }
+
+/** The one switch for remediation. Anything but the exact string "true" means off. */
+export const proposeFixEnabled = (env: Env) => env.PROPOSE_FIX_ENABLED === "true";
 
 function publicStatus(run: { status: string; conclusion: string | null } | null): { status: string; conclusion: string | null } {
   if (!run) return { status: "queued", conclusion: null };
@@ -66,7 +72,7 @@ export default {
 
     try {
       if (url.pathname === "/api/health" && req.method === "GET") {
-        return json(env, req, { ok: true, launchEnabled: env.LAUNCH_ENABLED !== "false" });
+        return json(env, req, { ok: true, launchEnabled: env.LAUNCH_ENABLED !== "false", proposeFixEnabled: proposeFixEnabled(env) });
       }
 
       if (url.pathname === "/api/launch" && req.method === "POST") {
@@ -79,30 +85,34 @@ export default {
         } catch {
           return err(env, req, 400, "bad_request", "Invalid JSON.");
         }
-        const keys = body && typeof body === "object" ? Object.keys(body) : [];
-        const demoId = (body as { demoId?: unknown } | null)?.demoId;
-        if (keys.length !== 1 || !isDemoId(demoId)) return err(env, req, 400, "unknown_demo", "Unknown demo.");
+        const parsed = parseLaunchRequest(body);
+        if (!parsed.ok) return err(env, req, 400, parsed.code, parsed.message);
+        const demoId = parsed.demoId;
+        // The request can only ask. The Worker setting decides: with it off, the field is ignored.
+        const proposeFix = parsed.proposeFix && proposeFixEnabled(env);
 
-        const r = await coord.reserve(client, demoId, limitConfig(env));
+        const r = await coord.reserve(client, demoId, limitConfig(env), proposeFix);
         if (!r.ok) {
           const msg: Record<string, string> = {
             disabled: "Launching is switched off right now.",
             busy: "Another demo is running. The Playground runs one at a time. Try again when it finishes.",
             rate_limited: "You have reached the hourly launch limit.",
             daily_cap: "The daily launch limit has been reached. Try again tomorrow.",
+            fix_rate_limited: "You have used your remediation launch for today. A scan without remediation is still available.",
+            fix_daily_cap: "The daily remediation limit has been reached. A scan without remediation is still available.",
           };
           const status = r.reason === "disabled" ? 503 : 429;
           return err(env, req, status, r.reason, msg[r.reason], r.retryAfterSec ? { "retry-after": String(r.retryAfterSec) } : {});
         }
         const launchId = r.launchId!;
         try {
-          await dispatch(env, DEMOS[demoId].workflowDemo, launchId);
+          await dispatch(env, DEMOS[demoId].workflowDemo, launchId, proposeFix);
         } catch (e) {
           await coord.finish(launchId, true);
           console.error("dispatch failed", e instanceof Error ? e.message : e);
           return err(env, req, 502, "dispatch_failed", "Could not start the workflow. Try again shortly.");
         }
-        return json(env, req, { launchId, demoId, status: "queued", conclusion: null }, 202);
+        return json(env, req, { launchId, demoId, proposeFix, status: "queued", conclusion: null }, 202);
       }
 
       const m = url.pathname.match(/^\/api\/(status|results)\/([^/]+)$/);
@@ -133,6 +143,7 @@ export default {
             runId: run?.id ?? null,
             branch: run?.head_branch ?? env.WORKFLOW_REF,
             workflow: env.WORKFLOW_FILE,
+            proposeFix: launch.proposeFix === true,
             createdAt: new Date(launch.createdAt).toISOString(),
             startedAt: run?.run_started_at ?? null,
             completedAt: st.status === "completed" ? run?.updated_at ?? null : null,
@@ -144,7 +155,17 @@ export default {
         if (!run || st.status !== "completed") return err(env, req, 409, "not_ready", "The run has not finished.");
         const zip = await getArtifactZip(env, run.id, `demo-triage-${DEMOS[launch.demo].workflowDemo}`);
         if (!zip) return err(env, req, 404, "no_artifact", "No results were saved for this run (they may have expired).");
-        return json(env, req, { launchId: id, demoId: launch.demo, runUrl: run.html_url, ...parseArtifact(zip) });
+        let fix: unknown;
+        if (launch.proposeFix) {
+          // Separate artifact from the triage one. A failure here must not hide the triage results.
+          try {
+            const fz = await getArtifactZip(env, run.id, `propose-fix-${DEMOS[launch.demo].workflowDemo}`);
+            fix = fz ? { available: true, ...parseFixArtifact(fz, env.GITHUB_OWNER, env.GITHUB_REPO) } : { available: false, prUrl: null };
+          } catch {
+            fix = { available: false, prUrl: null };
+          }
+        }
+        return json(env, req, { launchId: id, demoId: launch.demo, runUrl: run.html_url, ...parseArtifact(zip), ...(fix ? { fix } : {}) });
       }
 
       return err(env, req, 404, "not_found", "Not found.");

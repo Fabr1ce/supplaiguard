@@ -1,33 +1,42 @@
 # Tasks: Scan a GitHub repository by URL
 
-Requirement ids refer to `requirements.md`. Do not start until the open questions are answered.
+Requirement ids refer to `requirements.md`. The open questions are answered (see Decisions in `requirements.md`). Task numbers follow the order of implementation.
 
 - [x] 1. Reference parser (G1)
   - [x] 1.1 Add `scanner/github_fetch.py` with `parse_github_ref` and `InvalidGithubRef`
   - [x] 1.2 Unit tests for accepted and rejected inputs, plus the hypothesis property test
-- [ ] 2. Fetch (G2)
-  - [ ] 2.1 Prototype `git clone` and the tarball API; record the choice and rate-limit findings in `design.md`
-  - [ ] 2.2 Implement `fetch_repo` with timeout, size limit, isolated environment and error mapping
-  - [ ] 2.3 Workspace context manager with cleanup on exit, exception and SIGINT
-  - [ ] 2.4 Tests against a local bare repo: success, bad ref, timeout, too large, hook not run, symlink escape
-- [ ] 3. CLI integration (G1.3, G3)
-  - [ ] 3.1 Add `--github`, `--ref`, `--keep-workspace` to `sg_scan.py`; reject `--github` combined with a positional repo
-  - [ ] 3.2 Set `repository` and optional `source` in the output; accept `source` in `validate_scan`
-  - [ ] 3.3 Fetch failures become `errors` entries and a non-clean exit; add a test that a failed fetch is never "clean"
-  - [ ] 3.4 Update the `sg-findings-schema` skill for the optional `source` field
-- [ ] 4. Scan limits (G2.5, G6.1)
-  - [ ] 4.1 Inspect how collectors walk the tree; add file count, file size and symlink guards
-  - [ ] 4.2 Report truncation as a `scanner/limits` error entry; tests for each limit
-  - [ ] 4.3 Report text for "no supported files found" (G3.5)
-- [ ] 5. GitHub Actions dispatch (G7 option B)
-  - [ ] 5.1 Add `.github/workflows/scan-repo.yml` with `workflow_dispatch` inputs `repo` and `ref`, passed via `env:`
-  - [ ] 5.2 Upload `report.html` and `findings.json` as artifacts; write `summary.md` to the job summary
-  - [ ] 5.3 Permissions: `contents: read` only
-- [ ] 6. Docs
-  - [ ] 6.1 README section: "Scan any public GitHub repo" with the CLI command and the Actions form
-  - [ ] 6.2 Document limits, defaults and what is not supported (private repos, other hosts)
-- [ ] 7. Decision checkpoint
-  - [ ] 7.1 Review with the user whether to build option C (hosted form); if yes, write a separate design for the sandbox
-- [ ] 8. Verification
-  - [ ] 8.1 Run the scanner test suite and the self-scan
-  - [ ] 8.2 Manual run against two public repos, one with findings and one without
+- [ ] 2. Agentic security guard (G8)
+  - [x] 2.0 Spec: G8, Decisions, ASI01-ASI10 table, clone-vs-tarball decision
+  - [x] 2.1 `scanner/sg_guard.py`: `validate_user_string`, `sanitize_untrusted`, `detect_injection`, `wrap_untrusted`
+  - [x] 2.2 Call the guard from `parse_github_ref`; unit and hypothesis tests (`test_sg_guard.py`)
+  - [x] 2.3 Injection detector wired into the scan as `suspicious_agent_skill` findings, incl. file names and HEAD commit message
+  - [x] 2.4 Escaped reports, no state written from repo text, injection findings never clean; tests
+  - [x] 2.5 Harden `demo-triage.yml` and any agent prompt to consume `wrap_untrusted` data; policy test
+  - [ ] 2.6 Re-verify ASI names against genai.owasp.org when online and fix the table in `design.md`
+- [x] 3. Fetch (G2)
+  - [x] 3.1 Decision: hardened `git clone` chosen, tarball not prototyped offline (recorded in `design.md`)
+  - [x] 3.2 Implement `fetch_repo` with timeout, size limit, isolated environment and error mapping
+  - [x] 3.3 Workspace context manager with cleanup on exit, exception and SIGINT
+  - [x] 3.4 Tests against a local bare repo: success, bad ref, timeout, too large, hook not run, symlink escape
+- [x] 4. CLI integration (G1.3, G3)
+  - [x] 4.1 Add `--github`, `--ref`, `--keep-workspace` to `sg_scan.py`; reject `--github` combined with a positional repo
+  - [x] 4.2 Set `repository` and optional `source` in the output; accept `source` in `validate_scan`
+  - [x] 4.3 Fetch failures become `errors` entries and a non-clean exit; add a test that a failed fetch is never "clean"
+  - [x] 4.4 Update the `sg-findings-schema` skill for the optional `source` field
+- [x] 5. Scan limits (G2.5, G6.1)
+  - [x] 5.1 Inspect how collectors walk the tree; add file count, file size and symlink guards
+  - [x] 5.2 Report truncation as a `scanner/limits` error entry; tests for each limit
+  - [x] 5.3 Report text for "no supported files found" (G3.5)
+- [x] 6. GitHub Actions dispatch (G7 option B)
+  - [x] 6.1 Add `.github/workflows/scan-repo.yml` with `workflow_dispatch` inputs `repo` and `ref`, passed via `env:`
+  - [x] 6.2 Upload `report.html` and `findings.json` as artifacts; write `summary.md` to the job summary
+  - [x] 6.3 Permissions: `contents: read` only
+- [x] 7. Docs
+  - [x] 7.1 README section: "Scan any public GitHub repo" with the CLI command and the Actions form
+  - [x] 7.2 Document limits, defaults and what is not supported (private repos, other hosts)
+- [x] 8. Decision checkpoint
+  - [x] 8.1 Decided: no option C (hosted form); CLI plus Actions only
+- [ ] 9. Verification
+  - [x] 9.1 Run the scanner test suite and the self-scan
+  - [ ] 9.2 (needs github.com, not possible offline; end-to-end covered by a local fixture test `test_hostile_repo_end_to_end`) Manual run against two public repos, one with findings and one without
+- [ ] 10. Optional, last: link findings to GitHub blob URLs at the scanned commit

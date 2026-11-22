@@ -37,6 +37,14 @@ export interface ResultFinding {
   remediationAvailable: boolean;
 }
 
+export interface FixOutcome {
+  /** false: the fix artifact is missing or expired. */
+  available: boolean;
+  prUrl: string | null;
+  gate?: { ran: boolean; changed: string[]; major: string[]; added: string[] };
+  recheck?: { outcome: string; complete: boolean | null; cleared: number; remaining: number } | null;
+}
+
 export interface Results {
   launchId: string;
   demoId: string;
@@ -49,6 +57,8 @@ export interface Results {
   mcpConfigsDisabled: number | null;
   remediationApplied: false;
   verificationRun: false;
+  /** Present only when this run asked for remediation. */
+  fix?: FixOutcome;
 }
 
 export interface StoredRun {

@@ -1,0 +1,105 @@
+name: Scan a public GitHub repo
+
+# Manual only. Scans any PUBLIC GitHub repository by URL or owner/name and publishes the report as a job summary
+# and an artifact. Spec: .kiro/specs/scan-github-repo.
+#
+# Security model (OWASP Top 10 for Agentic Applications; see README "Scan any public GitHub repo")
+#  - The inputs are untrusted. They reach the shell only through `env:`, never through ${{ }} inside `run:`,
+#    and are validated twice: a strict regex here and the scanner's own guard (scanner/sg_guard.py).
+#  - The scanned repository is cloned by the scanner (shallow, hooks off, no submodules) into a temp directory.
+#    Nothing from it is executed, installed or built.
+#  - No secrets, no agent and no model are used. permissions: contents: read only.
+#  - Text quoted from the scanned repository is escaped in the reports and the summary.
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: Public GitHub repository to scan, as owner/name or https://github.com/owner/name
+        type: string
+        required: true
+      ref:
+        description: Branch or tag to scan. Leave empty for the default branch.
+        type: string
+        required: false
+        default: ""
+
+permissions: {}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # read this repository (the scanner); the target is public and needs no token
+    steps:
+      - name: Validate inputs
+        env:
+          REPO: ${{ inputs.repo }}
+          REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          re_repo='^(https://github\.com/)?[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}(\.git)?/?$'
+          [[ "$REPO" =~ $re_repo ]] || { echo "::error::repo must be owner/name or https://github.com/owner/name"; exit 2; }
+          if [ -n "$REF" ]; then
+            [[ "$REF" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$ && "$REF" != *..* ]] || { echo "::error::ref has unexpected characters"; exit 2; }
+          fi
+
+      - name: Check out SupplAIGuard
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.15"
+
+      - name: Scan
+        id: scan
+        env:
+          REPO: ${{ inputs.repo }}
+          REF: ${{ inputs.ref }}
+        run: |
+          set -uo pipefail
+          out="$RUNNER_TEMP/sg-out"
+          args=(--github="$REPO" --environment ci --out-dir "$out")
+          if [ -n "$REF" ]; then args+=(--ref="$REF"); fi
+          # GitHub runs steps as `bash -e`: capture the scanner exit code (1 = findings, 2 = scan errors).
+          code=0
+          python scanner/sg_scan.py "${args[@]}" > /dev/null || code=$?
+          # A crash before the reports are written must never look like "findings" or "clean".
+          if [ ! -f "$out/summary.md" ]; then code=2; fi
+          echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Publish job summary
+        if: ${{ always() }}
+        env:
+          CODE: ${{ steps.scan.outputs.exit-code }}
+        run: |
+          out="$RUNNER_TEMP/sg-out"
+          {
+            if [ -f "$out/summary.md" ]; then cat "$out/summary.md"; else echo "## SupplAIGuard scan: INCOMPLETE"; echo; echo "The scanner did not produce a report. This is NOT a clean result."; fi
+            echo
+            echo "<sub>exit code: ${CODE:-?} (0 clean, 1 findings, 2 scan errors or incomplete)</sub>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: supplaiguard-report
+          path: ${{ runner.temp }}/sg-out
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Gate
+        env:
+          CODE: ${{ steps.scan.outputs.exit-code }}
+        run: |
+          case "${CODE:-2}" in
+            0) echo "SupplAIGuard: no findings." ;;
+            1) echo "::warning::SupplAIGuard found issues in the scanned repository. See the job summary." ;;
+            *) echo "::error::SupplAIGuard could not complete the scan, so this is not a clean result. See the job summary."; exit 2 ;;
+          esac

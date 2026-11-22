@@ -204,3 +204,88 @@ def test_verification_may_only_read_which_branch_and_commit_it_checked():
     """R20.6: Verification states the branch and commit; its git access stays exact read-only strings."""
     git = [p for p in patterns("verification", "shell", "allow") if p.startswith("git")]
     assert set(git) == {"git branch --show-current", "git rev-parse --short HEAD"}, git
+
+
+# ---- untrusted repository text (spec scan-github-repo, G8; OWASP Agentic ASI01 / ASI06)
+ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize("prompt", sorted((AGENTS_DIR / "prompts").glob("*.md")), ids=lambda p: p.stem)
+def test_every_agent_prompt_declares_repo_text_untrusted(prompt):
+    text = prompt.read_text().lower()
+    assert "untrusted input" in text and "never instructions" in text
+
+
+def test_demo_triage_feeds_the_agent_only_wrapped_scanner_output():
+    wf = (ROOT / ".github" / "workflows" / "demo-triage.yml").read_text()
+    assert "wrap_untrusted" in wf
+    assert "findings.untrusted.txt" in wf
+    assert 'cp "$RUNNER_TEMP/out/findings.json" "$work/findings.json"' not in wf
+    assert "./findings.json" not in wf
+
+
+# ---- propose-fix job in demo-triage.yml (optional, off by default, draft PR only)
+import re  # noqa: E402
+
+WORKFLOW = ROOT / ".github" / "workflows" / "demo-triage.yml"
+
+
+def _job(name: str) -> str:
+    """Text of one top-level job (no YAML parser is installed for the scanner)."""
+    m = re.search(rf"^  {re.escape(name)}:\n(.*?)(?=^  [a-z][a-z-]*:\n|\Z)", WORKFLOW.read_text(), re.S | re.M)
+    assert m, f"job {name} not found"
+    return m.group(1)
+
+
+def test_propose_fix_input_is_a_boolean_off_by_default_and_launch_id_survives():
+    wf = WORKFLOW.read_text()
+    block = re.search(r"^      propose-fix:\n(.*?)(?=^permissions:)", wf, re.S | re.M).group(1)
+    assert "type: boolean" in block and "default: false" in block
+    assert "launch_id:" in wf and "run-name: Demo triage ${{ inputs.demo }} ${{ inputs.launch_id }}" in wf
+
+
+def test_propose_fix_job_runs_only_when_requested():
+    assert "if: ${{ inputs.propose-fix }}" in _job("propose-fix")
+
+
+def test_propose_fix_agent_gets_only_wrapped_untrusted_findings():
+    job = _job("propose-fix")
+    assert "wrap_untrusted" in job and "findings.untrusted.txt" in job
+    assert 'cp "$RUNNER_TEMP/out/before.json" "$work/findings.json"' not in job
+    assert "./findings.json" not in job
+
+
+def test_propose_fix_permissions_are_least_privilege_and_other_jobs_stay_read_only():
+    assert re.search(r"permissions:\n      contents: write[^\n]*\n      pull-requests: write", _job("propose-fix"))
+    assert "actions: write" not in _job("propose-fix") and "id-token" not in _job("propose-fix")
+    assert "contents: read" in _job("triage") and "write" not in _job("triage").split("steps:")[0]
+    assert "write" not in _job("publish").split("steps:")[0]
+    assert re.search(r"^permissions: \{\}$", WORKFLOW.read_text(), re.M)
+
+
+def test_propose_fix_is_gated_deterministically_and_opens_only_a_draft():
+    job = _job("propose-fix")
+    assert "scanner/fix_gate.py" in job
+    assert job.index("fix_gate.py") < job.index("gh pr create")
+    assert "gh pr create --draft" in job
+    for forbidden in ("gh pr merge", "--auto", "--admin", "push --force", "push -f"):
+        assert forbidden not in job
+
+
+def test_propose_fix_never_hands_the_token_to_the_agent_or_stores_it():
+    job = _job("propose-fix")
+    agent_step = job.split("The Remediation agent proposes edits")[1].split("- name:")[0]
+    assert "GH_TOKEN" not in agent_step and "github.token" not in agent_step
+    assert job.count("persist-credentials: false") >= 1
+    assert "fs_write" in job and '"**/.github/**"' in job
+
+
+def test_every_action_in_the_workflow_is_pinned_to_a_sha():
+    for line in WORKFLOW.read_text().splitlines():
+        m = re.search(r"uses:\s*(\S+)", line)
+        if m:
+            assert re.fullmatch(r"[\w./-]+@[0-9a-f]{40}", m.group(1)), m.group(1)
+
+
+def test_propose_fix_saves_the_pr_url_for_the_playground():
+    assert 'tee "$out/pr-url.txt"' in _job("propose-fix")

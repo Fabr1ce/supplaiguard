@@ -66,12 +66,13 @@ async function installationToken(env: Env): Promise<string> {
 
 const repoPath = (env: Env) => `${API}/repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}`;
 
-export async function dispatch(env: Env, demo: string, launchId: string): Promise<void> {
+/** `propose-fix` is added to the workflow inputs only when asked for; the workflow input defaults to false. */
+export async function dispatch(env: Env, demo: string, launchId: string, proposeFix = false): Promise<void> {
   const token = await installationToken(env);
   const res = await gh(`${repoPath(env)}/actions/workflows/${env.WORKFLOW_FILE}/dispatches`, {
     token,
     method: "POST",
-    body: JSON.stringify({ ref: env.WORKFLOW_REF, inputs: { demo, launch_id: launchId } }),
+    body: JSON.stringify({ ref: env.WORKFLOW_REF, inputs: { demo, launch_id: launchId, ...(proposeFix ? { "propose-fix": "true" } : {}) } }),
   });
   if (res.status !== 204) throw new GitHubError(`dispatch ${res.status}`);
 }

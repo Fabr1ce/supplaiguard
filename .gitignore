@@ -18,3 +18,7 @@ assets/build_logo.py
 
 # SupplAIGuard Learn history (local, per developer)
 .supplaiguard/history.jsonl
+
+# Private keys and certificates (GitHub App keys live in playground/worker; never commit them)
+*.pem
+*.key

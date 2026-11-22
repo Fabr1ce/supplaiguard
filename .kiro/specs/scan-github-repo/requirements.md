@@ -77,7 +77,7 @@ The design SHALL compare these and recommend one for the hackathon:
 |---|---|---|
 | A. CLI flag | `sg_scan.py --github owner/repo` clones locally and scans | None beyond G2; runs on the judge's machine |
 | B. GitHub Actions `workflow_dispatch` | Judge enters a repo in a form, the workflow clones, scans, uploads the report as an artifact | Needs a GitHub account; runs untrusted input in our CI |
-| C. Hosted web form | Static page plus a small API (Lambda) that runs the scan in an isolated sandbox and returns the report | Cost, abuse, sandboxing, a public endpoint |
+| C. Hosted web form (**not built**, see Decisions) | Static page plus a small API (Lambda) that runs the scan in an isolated sandbox and returns the report | Cost, abuse, sandboxing, a public endpoint |
 
 ## Out of scope
 
@@ -86,8 +86,49 @@ The design SHALL compare these and recommend one for the hackathon:
 - Running the agent pipeline (remediation, verification) on the fetched repo.
 - Scanning more than one repository per request.
 
-## Open questions
+### G8. Input validation and prompt-injection guard (OWASP Top 10 for Agentic Applications)
 
-1. Is a hosted endpoint (option C) wanted for the demo, or is CLI plus Actions enough?
-2. Is a 200 MB size limit and a 120 s timeout acceptable for the demo repos?
-3. Should the report be able to link findings to blob URLs on GitHub at the scanned commit?
+**User story:** As a maintainer, I want every string a user or a scanned repository can influence to be validated or
+treated as untrusted data, so that a crafted URL, ref or repository text cannot hijack the scanner, the CI workflow or a
+downstream agent.
+
+The risk categories ASI01 to ASI10 are mapped in `design.md`. The names are recorded from memory and must be
+re-verified against genai.owasp.org (it was not reachable when this spec was written).
+
+1. **(a) User-controlled strings.** WHEN the entry point receives a user-controlled string (repository URL, `--ref`,
+   CLI arguments, `workflow_dispatch` inputs), THE guard SHALL validate it against an allow-list before any use. THE
+   guard SHALL:
+   - normalize with NFKC and require ASCII-only after normalization, and reject the input if normalization changed it;
+   - reject control characters, newlines, bidirectional controls, zero-width characters and Unicode tag characters;
+   - reject IDN and homoglyph hosts (any non-ASCII host, any `xn--` label) and percent-encoding;
+   - enforce length caps (defaults: 300 characters for a URL, 200 for a ref, 100 for a repo name);
+   - reject a ref, owner or repo whose text reads as an instruction to an agent (for example "ignore previous
+     instructions", "you are now", "system prompt").
+   A rejection SHALL name the rule and SHALL NOT echo the raw offending string unescaped.
+2. **(b) Untrusted repository text.** THE scanner SHALL run a deterministic prompt-injection detector over untrusted
+   repository text: README files, `SKILL.md`, agent and MCP config bodies, file names, and the HEAD commit message. WHEN
+   it matches, THE scanner SHALL emit a `suspicious_agent_skill` finding with an `SKL-001`, `SKL-002` or `SKL-005`
+   style rule id, quoted evidence, and severity and confidence as in `severity-and-confidence.md` (exact literal match
+   high confidence, heuristic match medium, ambiguous low). Evidence SHALL be sanitized and truncated.
+3. **(c) No model sees raw repo text.** THE scanner SHALL NOT send repository text to any model or external service.
+   WHERE a downstream agent (for example the demo-triage Kiro agent) reads scan output, it SHALL receive repository
+   text only as sanitized, delimited untrusted data with an explicit instruction not to follow it.
+4. **(d) Least privilege and containment.** THE feature SHALL execute no code from the target repo, use a pinned
+   fetch (https, github.com only, hardened git), enforce the size, time, file-count and per-file caps of G2 and G6,
+   escape all repository text in reports (Markdown, HTML, terminal), and SHALL NOT write persistent memory, state,
+   suppressions or configuration derived from untrusted content.
+5. **(e) Never a false all-clear.** A failed fetch, a rejected input, a truncated scan, or a scan that produced
+   injection findings SHALL NOT be reported as clean (security policy, evidence discipline).
+
+## Out of scope (additions)
+
+- A hosted endpoint (option C) and any per-client rate limiting for it (G6.2 applies only if it is ever built).
+
+## Decisions
+
+Recorded from the open questions of the first draft:
+
+1. **No hosted endpoint.** CLI plus GitHub Actions `workflow_dispatch` is enough for the demo. Option C is not built.
+2. **Limits accepted.** 200 MB size limit and 120 s timeout are acceptable for the demo repos.
+3. **Blob-URL links.** Findings may link to GitHub blob URLs at the scanned commit. This is optional and is done last,
+   after the guard and the fetch are complete.

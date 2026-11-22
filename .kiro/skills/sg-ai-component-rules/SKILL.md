@@ -48,7 +48,7 @@ Handle both 2.x and V3 shapes:
 
 Scan agent `prompt` text and SKILL.md bodies (case-insensitive) for:
 
-- exfiltration to external URL → `SKL-001`
+- instructions that send data to an external URL → `SKL-001`
 - disable/bypass security checks or approvals → `SKL-002`
 - fetch-and-execute remote code (`curl … | bash`, `eval` of downloaded) → `SKL-003`
 - read secrets and include in output → `SKL-004`
