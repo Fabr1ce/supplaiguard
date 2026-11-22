@@ -36,7 +36,7 @@ export function buildStages(jobs: Job[]): Stage[] {
 
 const ICON: Record<State, ReactNode> = {
   done: <CheckCircle2 className="h-5 w-5 text-ok" aria-label="Completed" />,
-  active: <Loader2 className="h-5 w-5 animate-spin text-cyan" aria-label="In progress" />,
+  active: <Loader2 className="h-5 w-5 animate-spin text-green" aria-label="In progress" />,
   pending: <Circle className="h-5 w-5 text-mute" aria-label="Pending" />,
   failed: <XCircle className="h-5 w-5 text-bad" aria-label="Failed" />,
   skipped: <MinusCircle className="h-5 w-5 text-mute" aria-label="Skipped" />,

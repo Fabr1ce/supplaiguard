@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Github, ShieldCheck } from "lucide-react";
+import { Github } from "lucide-react";
 import Navigation from "./Navigation";
 import { apiConfigured, getHealth } from "../../services/api";
 
@@ -16,10 +16,10 @@ export default function Header() {
   const dot = { checking: "bg-mute", up: "bg-ok", paused: "bg-warn", down: "bg-bad" }[health];
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-midnight/80 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-line bg-ground/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-3">
         <Link to="/" className="flex items-center gap-2 font-semibold">
-          <ShieldCheck className="h-6 w-6 text-violet" aria-hidden />
+          <img src={`${import.meta.env.BASE_URL}mark.svg`} alt="" width={36} height={36} className="h-9 w-9" />
           <span>SupplAIGuard <span className="text-mute font-normal">Playground</span></span>
         </Link>
         <div className="flex items-center gap-3">

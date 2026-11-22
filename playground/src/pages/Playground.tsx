@@ -37,7 +37,8 @@ export default function Playground() {
   return (
     <div className="space-y-10">
       <section className="pt-6 text-center">
-        <p className="text-sm text-cyan">SupplAIGuard Security Playground</p>
+        <img src={`${import.meta.env.BASE_URL}banner.gif`} width={640} height={360} alt="SupplAIGuard: a stitched green and purple ghost-shield inside a five-step loop" className="mx-auto mb-6 h-auto w-full max-w-[760px] rounded-2xl" />
+        <p className="text-sm text-green">SupplAIGuard Security Playground</p>
         <motion.h1 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mx-auto mt-2 max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">
           Watch AI <span className="shimmer">find it</span>. See what it <span className="shimmer">reports</span>.
         </motion.h1>
@@ -58,7 +59,7 @@ export default function Playground() {
       {active && (
         <div className="glass flex flex-wrap items-center justify-between gap-2 p-4 text-sm">
           <span>Run <span className="font-mono">{active.launchId}</span> is still going.</span>
-          <button type="button" className="text-cyan hover:underline" onClick={() => nav(`/run/${active.launchId}`)}>Open it</button>
+          <button type="button" className="text-green hover:underline" onClick={() => nav(`/run/${active.launchId}`)}>Open it</button>
         </div>
       )}
       {error && <div role="alert" className="rounded-xl border border-bad/50 bg-bad/10 p-4 text-sm text-bad">{error}</div>}
@@ -77,13 +78,13 @@ export default function Playground() {
             { Icon: ShieldCheck, t: "3. Read the results", d: "You see the real findings. A run that finishes does not mean anything was fixed: this workflow changes no code." },
           ].map(({ Icon, t, d }) => (
             <div key={t} className="glass p-5">
-              <Icon className="h-6 w-6 text-violet" aria-hidden />
+              <Icon className="h-6 w-6 text-purple" aria-hidden />
               <h3 className="mt-2 font-semibold">{t}</h3>
               <p className="mt-1 text-sm text-mute">{d}</p>
             </div>
           ))}
         </div>
-        <p className="mt-4 flex items-start gap-2 text-sm text-mute"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-cyan" aria-hidden />
+        <p className="mt-4 flex items-start gap-2 text-sm text-mute"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-green" aria-hidden />
           The full SupplAIGuard loop (propose a fix, approve it, re-scan to verify) needs a developer's approval and is not started from this page.</p>
       </section>
     </div>

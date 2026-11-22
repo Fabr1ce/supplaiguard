@@ -4,7 +4,7 @@ import { OUTCOME_LABEL, type Outcome } from "../../services/format";
 const STYLE: Record<Outcome, { cls: string; Icon: typeof Clock; spin?: boolean }> = {
   ready: { cls: "text-mute border-line", Icon: CircleDashed },
   queued: { cls: "text-warn border-warn/40", Icon: Clock },
-  in_progress: { cls: "text-cyan border-cyan/40", Icon: Loader2, spin: true },
+  in_progress: { cls: "text-green border-green/40", Icon: Loader2, spin: true },
   success: { cls: "text-ok border-ok/40", Icon: CheckCircle2 },
   failure: { cls: "text-bad border-bad/40", Icon: XCircle },
   cancelled: { cls: "text-mute border-line", Icon: Ban },

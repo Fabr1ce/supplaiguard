@@ -22,7 +22,7 @@ export default function DemoCard({ demo, last, onLaunch, launching, blocked }: {
       <div className="flex items-start justify-between gap-2">
         <div>
           <h3 id={`d-${demo.id}`} className="text-lg font-semibold">{demo.name}</h3>
-          <p className="mt-0.5 text-xs text-cyan">{demo.categories.join(" · ")}</p>
+          <p className="mt-0.5 text-xs text-green">{demo.categories.join(" · ")}</p>
         </div>
         <StatusIndicator outcome={state} />
       </div>
@@ -41,7 +41,7 @@ export default function DemoCard({ demo, last, onLaunch, launching, blocked }: {
       )}
 
       <div>
-        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-1 text-sm text-violet hover:text-ink">
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-1 text-sm text-purple hover:text-ink">
           <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
           Scanner findings and why they matter
         </button>
@@ -66,7 +66,7 @@ export default function DemoCard({ demo, last, onLaunch, launching, blocked }: {
       <div className="mt-auto space-y-2">
         <LaunchButton onClick={() => onLaunch(demo.id)} loading={launching} disabled={blocked !== null} />
         {blocked && <p className="text-xs text-warn">{blocked}</p>}
-        {last && <Link to={`/run/${last.launchId}`} className="block text-center text-xs text-cyan hover:underline">View last run</Link>}
+        {last && <Link to={`/run/${last.launchId}`} className="block text-center text-xs text-green hover:underline">View last run</Link>}
       </div>
     </motion.article>
   );

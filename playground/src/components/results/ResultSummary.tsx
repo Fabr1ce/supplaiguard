@@ -8,7 +8,7 @@ export default function ResultSummary({ r }: { r: Results }) {
     <section className="glass p-5" aria-labelledby="ts">
       <div className="flex items-center justify-between gap-2">
         <h2 id="ts" className="text-lg font-semibold">Kiro agent triage notes</h2>
-        <button type="button" className="text-sm text-violet hover:text-ink" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? "Hide" : "Show"}</button>
+        <button type="button" className="text-sm text-purple hover:text-ink" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? "Hide" : "Show"}</button>
       </div>
       {open && (r.triage.text
         ? <pre className="mt-3 max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/30 p-3 font-mono text-xs leading-relaxed">{r.triage.text}</pre>

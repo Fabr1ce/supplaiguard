@@ -1,15 +1,11 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="SupplAIGuard logo: a stitched green and purple Frankenstein ghost-shield inside a five-step loop: Discover, Analyze, Remediate, Verify, Learn, then back to Discover" width="760">
+  <img src="assets/social-preview-rounded.gif" alt="Animated SupplAIGuard banner: a stitched green and purple Frankenstein ghost-shield inside a five-step loop: Discover, Analyze, Remediate, Verify, Learn, then back to Discover" width="760">
 </p>
 
 # SupplAIGuard
 
 **Autonomous security for AI-native applications.**
 *Prevent locally. Detect continuously. Remediate intelligently. Verify automatically.*
-
-<p align="center">
-  <img src="assets/social-preview.gif" alt="Animated SupplAIGuard social preview showing the Discover, Analyze, Remediate, Verify, Learn security loop" width="760">
-</p>
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2ea44f?style=for-the-badge"></a>

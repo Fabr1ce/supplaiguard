@@ -9,7 +9,7 @@ function download(name: string, mime: string, text: string) {
   URL.revokeObjectURL(url);
 }
 
-const btn = "inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm hover:border-violet";
+const btn = "inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 text-sm hover:border-purple";
 
 export default function ReportLinks({ r }: { r: Results }) {
   return (

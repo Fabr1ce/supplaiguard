@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom";
 
 const link = ({ isActive }: { isActive: boolean }) =>
-  `rounded-lg px-3 py-2 text-sm transition-colors ${isActive ? "bg-violet/20 text-ink" : "text-mute hover:text-ink"}`;
+  `rounded-lg px-3 py-2 text-sm transition-colors ${isActive ? "bg-purple/20 text-ink" : "text-mute hover:text-ink"}`;
 
 export default function Navigation() {
   return (

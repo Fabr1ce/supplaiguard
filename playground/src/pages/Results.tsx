@@ -25,7 +25,7 @@ export default function Results() {
       <div role="alert" className="glass mx-auto mt-10 max-w-xl p-6">
         <p className="font-medium">{err.status === 409 ? "The run has not finished yet." : "Results are not available."}</p>
         <p className="mt-1 text-sm text-mute">{err.message}</p>
-        <Link to={`/run/${id}`} className="mt-3 inline-block text-cyan hover:underline">Back to the execution</Link>
+        <Link to={`/run/${id}`} className="mt-3 inline-block text-green hover:underline">Back to the execution</Link>
       </div>
     );
   }
@@ -35,7 +35,7 @@ export default function Results() {
   return (
     <div className="space-y-5">
       <div>
-        <Link to={`/run/${id}`} className="text-sm text-cyan hover:underline">← Execution</Link>
+        <Link to={`/run/${id}`} className="text-sm text-green hover:underline">← Execution</Link>
         <h1 className="mt-1 text-2xl font-semibold">{name}: security results</h1>
         <p className="font-mono text-xs text-mute">Execution {id}</p>
       </div>

@@ -27,7 +27,7 @@ export default function Execution() {
       <div role="alert" className="glass mx-auto mt-10 max-w-xl p-6">
         <p className="font-medium">{error.status === 404 ? "This execution was not found." : "Could not load this execution."}</p>
         <p className="mt-1 text-sm text-mute">{error.message}</p>
-        <Link to="/" className="mt-3 inline-block text-cyan hover:underline">Back to the Playground</Link>
+        <Link to="/" className="mt-3 inline-block text-green hover:underline">Back to the Playground</Link>
       </div>
     );
   }
@@ -55,7 +55,7 @@ export default function Execution() {
       </details>
       {done && (
         <div className="flex flex-wrap items-center gap-3">
-          <Link to={`/run/${id}/results`} className="rounded-xl bg-violet px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet/90">View security results</Link>
+          <Link to={`/run/${id}/results`} className="rounded-xl bg-purple px-4 py-2.5 text-sm font-semibold text-ground hover:bg-purple/90">View security results</Link>
           {execution?.conclusion !== "success" && <span className="text-sm text-mute">The run did not finish successfully. Results may be missing.</span>}
         </div>
       )}

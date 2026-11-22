@@ -24,12 +24,18 @@ URL_OK = re.compile(r"^(https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/act
 RULE_OK = re.compile(r"^[A-Z]{3}-\d{3}$")
 SEVERITIES = ("critical", "high", "medium", "low")
 ACRONYMS = {"ai": "AI", "mcp": "MCP", "ci": "CI"}
-DEFAULT_LOGO = Path(__file__).resolve().parent.parent / "assets" / "logo.svg"
+ASSETS = Path(__file__).resolve().parent.parent / "assets"
+DEFAULT_BANNER = ASSETS / "social-preview-rounded.gif"
+DEFAULT_MARK = ASSETS / "site-mark.svg"
 
 # Brand colours come from the logo: dark violet ground, green, purple and orange accents.
 CSS = """
 :root{--bg:#120f1a;--panel:#1a1326;--line:#2a2440;--text:#ece8f5;--mute:#a9a2bd;--green:#8fd36b;--purple:#a265ff;--orange:#ff9f43}
 *{box-sizing:border-box}
+.topbar{display:flex;align-items:center;gap:.6rem;max-width:56rem;margin:0 auto;padding:.75rem 1rem 0}
+.topbar a{display:inline-flex;align-items:center;gap:.6rem;color:var(--text);text-decoration:none;font-weight:600}
+.topbar a:hover{color:var(--green)}
+.topbar img{width:36px;height:36px;display:block}
 body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
 main{max-width:56rem;margin:0 auto;padding:1.5rem 1rem 3rem}
 header{text-align:center;margin-bottom:1.5rem}
@@ -72,13 +78,19 @@ def title_case(slug: str) -> str:
     return " ".join(ACRONYMS.get(w.lower(), w[:1].upper() + w[1:]) for w in words if w)
 
 
-def _page(title: str, body: str) -> str:
+def _topbar(prefix: str) -> str:
+    """Small brand mark (head and ring) at the top left, linking to the index page."""
+    return (f'<nav class="topbar"><a href="{prefix}index.html"><img src="{prefix}mark.svg" width="36" height="36" alt="">'
+            "<span>SupplAIGuard</span></a></nav>")
+
+
+def _page(title: str, body: str, topbar: str = "") -> str:
     return (f'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            f"<title>{html.escape(title)}</title><style>{CSS}</style><body><main>{body}</main></body></html>")
+            f"<title>{html.escape(title)}</title><style>{CSS}</style><body>{topbar}<main>{body}</main></body></html>")
 
 
-def _header(logo_src: str, h1: str) -> str:
-    return (f'<header><img src="{logo_src}" width="760" alt="SupplAIGuard logo: a stitched green and purple '
+def _header(banner_src: str, h1: str) -> str:
+    return (f'<header><img src="{banner_src}" width="760" alt="SupplAIGuard: a stitched green and purple '
             f'ghost-shield inside a five-step loop">'
             f"<h1>{html.escape(h1)}</h1>"
             '<p class="tag">Autonomous Security For AI-Native Applications</p></header>')
@@ -126,16 +138,18 @@ def _counts(d: Path) -> str:
     return line
 
 
-def build(src: Path, out: Path, run_url: str, when: str, logo: Path | None = None) -> None:
+def build(src: Path, out: Path, run_url: str, when: str, banner: Path | None = None, mark: Path | None = None) -> None:
     m = URL_OK.match(run_url)
     if not m:
         raise ValueError("run_url must be an https://github.com/<owner>/<repo>/actions/runs/<id> URL")
     repo_url = m.group(1)
     out.mkdir(parents=True, exist_ok=True)
-    logo = logo or DEFAULT_LOGO
-    has_logo = logo.is_file()
-    if has_logo:
-        shutil.copyfile(logo, out / "logo.svg")
+    banner, mark = banner or DEFAULT_BANNER, mark or DEFAULT_MARK
+    has_banner, has_mark = banner.is_file(), mark.is_file()
+    if has_banner:
+        shutil.copyfile(banner, out / "banner.gif")
+    if has_mark:
+        shutil.copyfile(mark, out / "mark.svg")
 
     rows, cards = [], []
     for d in sorted(p for p in src.glob("demo-triage-*") if p.is_dir()):
@@ -159,12 +173,12 @@ def build(src: Path, out: Path, run_url: str, when: str, logo: Path | None = Non
         triage = d / "triage.txt"
         if triage.is_file():
             text = triage.read_text(errors="replace")[:60000]
-            logo_tag = '<header><a href="../index.html"><img src="../logo.svg" width="380" alt="SupplAIGuard logo"></a></header>' if has_logo else ""
             (dest / "triage.html").write_text(_page(
                 f"{title_case(name)}: Agent Triage",
-                f"{logo_tag}<h1>{shown}: Agent Triage</h1><p class=\"{tri_c}\">{tri_l}</p>"
+                f"<h1>{shown}: Agent Triage</h1><p class=\"{tri_c}\">{tri_l}</p>"
                 "<p class=\"note\">Untrusted model output about an untrusted repository. Shown as plain text.</p>"
-                f"<pre>{html.escape(text)}</pre><p><a href=\"../index.html\">Back To All Demos</a></p>"))
+                f"<pre>{html.escape(text)}</pre><p><a href=\"../index.html\">Back To All Demos</a></p>",
+                _topbar("../") if has_mark else ""))
             links.append(f'<a href="{name}/triage.html">Agent Triage Output</a>')
 
         rows.append(f"<tr><td><strong>{shown}</strong></td><td class=\"{copy_c}\">{copy_l}</td>"
@@ -174,7 +188,7 @@ def build(src: Path, out: Path, run_url: str, when: str, logo: Path | None = Non
 
     flow_items = "".join(f"<li><strong>{n}</strong><br><span class=\"dim\">{html.escape(t)}</span></li>" for n, t in FLOW)
     body = (
-        (_header("logo.svg", TITLE) if has_logo else f"<header><h1>{html.escape(TITLE)}</h1></header>")
+        (_header("banner.gif", TITLE) if has_banner else f"<header><h1>{html.escape(TITLE)}</h1></header>")
         + '<div class="panel"><a class="btn" href="' + html.escape(repo_url, quote=True) + '/actions/workflows/demo-triage.yml">Run The Demo Workflow</a>'
         '<p class="note">Starting a run needs write access to the repository, so the button opens the workflow page '
         "on GitHub. Everyone else can read the latest results below, or fork the repository and run it there.</p></div>"
@@ -187,7 +201,7 @@ def build(src: Path, out: Path, run_url: str, when: str, logo: Path | None = Non
         + f'<footer>Generated {html.escape(when)} by <a href="{html.escape(run_url, quote=True)}">this workflow run</a>. '
         "No login is needed to read this page.</footer>"
     )
-    (out / "index.html").write_text(_page(TITLE, body))
+    (out / "index.html").write_text(_page(TITLE, body, _topbar("") if has_mark else ""))
     (out / ".nojekyll").write_text("")
 
 

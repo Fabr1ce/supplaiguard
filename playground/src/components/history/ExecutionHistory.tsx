@@ -21,7 +21,7 @@ export default function ExecutionHistory({ runs }: { runs: StoredRun[] }) {
               <td className="p-3 text-mute">{time(r.createdAt)}</td>
               <td className="p-3">{OUTCOME_LABEL[outcome(r.status, r.conclusion)]}</td>
               <td className="p-3 text-mute">Not run</td>
-              <td className="p-3"><Link className="text-cyan hover:underline" to={r.status === "completed" ? `/run/${r.launchId}/results` : `/run/${r.launchId}`}>Open</Link></td>
+              <td className="p-3"><Link className="text-green hover:underline" to={r.status === "completed" ? `/run/${r.launchId}/results` : `/run/${r.launchId}`}>Open</Link></td>
             </tr>
           ))}
         </tbody>
