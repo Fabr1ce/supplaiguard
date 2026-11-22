@@ -37,6 +37,6 @@ Requirement ids refer to `requirements.md`. The open questions are answered (see
 - [x] 8. Decision checkpoint
   - [x] 8.1 Decided: no option C (hosted form); CLI plus Actions only
 - [ ] 9. Verification
-  - [ ] 9.1 Run the scanner test suite and the self-scan
-  - [ ] 9.2 Manual run against two public repos, one with findings and one without
+  - [x] 9.1 Run the scanner test suite and the self-scan
+  - [ ] 9.2 (needs github.com, not possible offline; end-to-end covered by a local fixture test `test_hostile_repo_end_to_end`) Manual run against two public repos, one with findings and one without
 - [ ] 10. Optional, last: link findings to GitHub blob URLs at the scanned commit
