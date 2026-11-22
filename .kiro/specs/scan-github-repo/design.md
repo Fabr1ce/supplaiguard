@@ -103,17 +103,26 @@ whether a string is acceptable or how untrusted text is neutralized.
 
 ### API
 
-- `validate_user_string(value, kind) -> str`: `kind` is one of `url`, `ref`, `repo`. NFKC and ASCII-only check,
-  rejection of control, bidi, zero-width, tag characters, percent-encoding, IDN or `xn--` hosts and newlines, length
-  caps, and instruction-like text. Raises `InvalidUserInput` naming the rule. `parse_github_ref` calls it first.
-- `sanitize_untrusted(text, max_len=200) -> str`: strips control, bidi, zero-width and tag characters, collapses
-  whitespace, truncates. Used for evidence, terminal output and anything shown to an agent.
-- `detect_injection(text) -> list[Match]`: deterministic patterns only (no model). Each match has a rule id
-  (`SKL-001`, `SKL-002`, `SKL-005` style), the sanitized quoted excerpt and a confidence. Detected hidden characters
-  count as a heuristic match.
-- `wrap_untrusted(text, label) -> str`: sanitizes the text and wraps it in a fixed delimiter block, for example
-  `<untrusted-data label="README.md"> ... </untrusted-data>`, escaping any delimiter inside the text, with a
-  one-line reminder that the content is data and not instructions.
+- `validate_user_string(value, kind, max_len=None) -> str`: `kind` is one of `url`, `ref`, `repo`. ASCII-only
+  allow-list with rejection of control, bidi, zero-width, tag characters, percent-encoding, backslash, NUL and
+  newlines, plus length caps (`MAX_URL_LEN` 300, `MAX_REF_LEN` 200, repo 100). `ref` and `repo` also reject
+  instruction-like text (`INSTRUCTION_PATTERNS`, separators `-_./` read as spaces) and non-hex blobs of 40 or more
+  characters. Raises `GuardError` (alias `InvalidUserInput`) with a stable `code`, and the message never echoes the
+  raw input. `parse_github_ref` calls it first on the URL, the ref and the repo name and re-raises as
+  `InvalidGithubRef` with the same `.code`. Host confusion (`xn--`, homoglyph or fullwidth hosts, userinfo, ports,
+  query, fragment, `github.com.evil.com`, upper-case host) is rejected by the guard or the exact-host regex.
+- `sanitize_untrusted(text, max_len=200) -> str`: strips control, bidi, zero-width, tag and ANSI characters,
+  collapses whitespace, truncates. Never raises. Used for evidence, terminal output and anything shown to an agent.
+- `detect_injection(text, source, component) -> list[dict]`: deterministic patterns only (no model). Returns
+  `suspicious_agent_skill` finding dicts without `id` or `status` (the caller assigns them) with rule id `SKL-001`,
+  `SKL-002`, `SKL-004` (high) or `SKL-005` (medium), the sanitized excerpt capped at 160 characters and a confidence
+  (high for literal override phrases and chat-role markers, medium for patterns, low for hidden-character-only
+  signals). Hidden characters are reported by codepoint (for example `U+200B x3`), and Unicode tag text is decoded
+  so smuggled instructions still match. Also flags encoded blobs next to decode or execute words, instructions in HTML
+  comments, and CSS-hidden text. Never raises.
+- `wrap_untrusted(text, label) -> str`: sanitizes the text and wraps it in `<<<BEGIN label nonce>>>` and
+  `<<<END label nonce>>>` markers with a per-call random nonce, breaks up any `<<<` or `>>>` inside the text, and
+  prefixes a one-line reminder that the content is data and not instructions.
 
 ### Trust boundary
 
@@ -137,7 +146,7 @@ names, numbering and scope MUST be re-verified before the table is cited.
 | Id | Risk | Control in this feature | Test (file, name; to be added in the feature that implements it) |
 |---|---|---|---|
 | ASI01 | Agent Goal Hijack | Instruction-like text rejected in ref and repo (G8a). Repo text only reaches an agent as `wrap_untrusted` data (G8c). `detect_injection` flags goal-override text in README, SKILL.md, agent and MCP bodies, names and commit message (G8b) | `test_sg_guard.py::test_rejects_instruction_like_ref`, `test_sg_guard.py::test_detect_injection_rules`, `test_sg_guard.py::test_wrap_untrusted_escapes_delimiters` |
-| ASI02 | Tool Misuse and Exploitation | Git runs by argument list with `--` and a rebuilt URL, validated ref, hardened env. No shell. Scanner has no tool that executes repo content | `test_github_fetch.py::test_rejected_inputs`, `test_github_fetch.py::test_fetch_hook_not_run` |
+| ASI02 | Tool Misuse and Exploitation | Git runs by argument list with `--` and a rebuilt URL, validated ref, hardened env. No shell. Scanner has no tool that executes repo content | `test_sg_guard.py::test_rejected_before_any_subprocess`, `test_github_fetch.py::test_rejected_inputs`, `test_github_fetch.py::test_fetch_hook_not_run` |
 | ASI03 | Identity and Privilege Abuse | No tokens, isolated `HOME`, empty git config, no credential helper. Workflows use `contents: read` only and pass inputs via `env:` | `test_github_fetch.py::test_fetch_env_isolated`, `test_agent_policy.py` workflow permission checks |
 | ASI04 | Agentic Supply Chain Vulnerabilities | Host fixed to github.com over https, no submodules, LFS or tags, no mirrors. Only package coordinates go to OSV.dev. The scanner itself stays stdlib-only | `test_github_fetch.py::test_clone_url_rebuilt`, `test_github_fetch.py::test_fetch_argv_hardened` |
 | ASI05 | Unexpected Code Execution | Repo code is never executed: no install, build or script. Hooks disabled. Symlinks outside the workspace are not followed | `test_github_fetch.py::test_fetch_hook_not_run`, `test_github_fetch.py::test_symlink_escape_skipped` |
