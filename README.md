@@ -136,6 +136,16 @@ flowchart LR
 > Status: the scanner, the CI scan and the agent permissions are tested (the permissions have their own
 > tests). The full live coordinator run and the Stop-review hook are not exercised yet.
 
+## Documentation
+
+The [docs](docs/README.md) folder explains how the pieces fit together:
+
+- [Architecture](docs/architecture.md): components, trust boundaries and data flow.
+- [Flow](docs/flow.md): an end to end walkthrough from a local scan to a merged fix.
+- [Security Model](docs/security-model.md): untrusted inputs, OWASP agentic mapping, permissions per workflow.
+- [Operations](docs/operations.md): setup checklist, how to run each workflow, troubleshooting.
+- [Status](docs/status.md): what is tested, what has never run live, and what is planned.
+
 ## Quick start
 
 **You need:** [Kiro CLI](https://kiro.dev/docs/cli/setup/) v3 (signed in), Python (3.15, the
