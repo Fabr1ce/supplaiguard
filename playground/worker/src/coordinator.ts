@@ -8,10 +8,10 @@ export class Coordinator extends DurableObject<Env> {
     return (await this.ctx.storage.get<LimitState>("s")) ?? emptyState();
   }
 
-  async reserve(client: string, demo: string, cfg: LimitConfig): Promise<Decision & { launchId?: string }> {
+  async reserve(client: string, demo: string, cfg: LimitConfig, proposeFix = false): Promise<Decision & { launchId?: string }> {
     const s = await this.load();
     const id = "pg-" + [...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(16).padStart(2, "0")).join("");
-    const launch: Launch = { id, demo, createdAt: Date.now() };
+    const launch: Launch = { id, demo, createdAt: Date.now(), ...(proposeFix ? { proposeFix: true } : {}) };
     const d = decideLaunch(s, Date.now(), client, launch, cfg);
     if (d.ok) await this.ctx.storage.put("s", d.state);
     return d.ok ? { ...d, launchId: id } : d;

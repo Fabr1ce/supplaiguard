@@ -428,8 +428,9 @@ jobs:
           # The token is given to git for this one command only; it is never stored in the checkout.
           auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin "$branch"
+          # The URL is saved into the artifact so the Playground Worker can show it (it validates the shape).
           gh pr create --draft --base "$BASE" --head "$branch" \
-            --title "SupplAIGuard: proposed fix for ${DEMO} (draft)" --body-file "$out/body.md"
+            --title "SupplAIGuard: proposed fix for ${DEMO} (draft)" --body-file "$out/body.md" | tee "$out/pr-url.txt"
 
       - name: Upload what the agent and the gate did
         if: ${{ always() }}

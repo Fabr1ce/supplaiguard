@@ -5,6 +5,8 @@ export interface Launch {
   createdAt: number;
   runId?: number;
   done?: boolean;
+  /** The run was dispatched with propose-fix. Only ever true when the Worker setting allowed it. */
+  proposeFix?: boolean;
 }
 
 export interface LimitState {
@@ -14,6 +16,10 @@ export interface LimitState {
   daily: Record<string, number>;
   /** hashed client -> launch timestamps (ms) */
   clients: Record<string, number[]>;
+  /** UTC day -> number of propose-fix launches (absent in state saved before the flag existed) */
+  fixDaily?: Record<string, number>;
+  /** hashed client -> propose-fix launch timestamps (ms) */
+  fixClients?: Record<string, number[]>;
 }
 
 export interface LimitConfig {
@@ -23,11 +29,14 @@ export interface LimitConfig {
   /** An active launch older than this is treated as finished, so a lost run cannot block everyone. */
   activeTtlMs: number;
   retainMs: number;
+  /** Propose-fix launches also count against the normal limits; these are the extra, tighter ones. */
+  proposeFixDailyCap: number;
+  proposeFixPerClientPerDay: number;
 }
 
 export type Decision =
   | { ok: true; state: LimitState }
-  | { ok: false; reason: "disabled" | "busy" | "rate_limited" | "daily_cap"; retryAfterSec?: number };
+  | { ok: false; reason: "disabled" | "busy" | "rate_limited" | "daily_cap" | "fix_rate_limited" | "fix_daily_cap"; retryAfterSec?: number };
 
 export const emptyState = (): LimitState => ({ launches: {}, active: null, daily: {}, clients: {} });
 export const utcDay = (t: number) => new Date(t).toISOString().slice(0, 10);
@@ -55,6 +64,15 @@ export function decideLaunch(
   const day = utcDay(now);
   if ((s.daily[day] ?? 0) >= cfg.dailyCap) return { ok: false, reason: "daily_cap" };
 
+  const dayMs = 24 * hour;
+  const fixRecent = (s.fixClients?.[client] ?? []).filter((t) => now - t < dayMs);
+  if (launch.proposeFix) {
+    if (fixRecent.length >= cfg.proposeFixPerClientPerDay) {
+      return { ok: false, reason: "fix_rate_limited", retryAfterSec: Math.ceil((dayMs - (now - fixRecent[0])) / 1000) };
+    }
+    if ((s.fixDaily?.[day] ?? 0) >= cfg.proposeFixDailyCap) return { ok: false, reason: "fix_daily_cap" };
+  }
+
   const launches: Record<string, Launch> = {};
   for (const [id, l] of Object.entries(s.launches)) if (now - l.createdAt < cfg.retainMs) launches[id] = l;
   launches[launch.id] = launch;
@@ -66,7 +84,15 @@ export function decideLaunch(
   }
   clients[client] = [...recent, now];
 
-  return { ok: true, state: { launches, active: launch.id, daily: { [day]: (s.daily[day] ?? 0) + 1 }, clients } };
+  const fixClients: Record<string, number[]> = {};
+  for (const [c, ts] of Object.entries(s.fixClients ?? {})) {
+    const kept = ts.filter((t) => now - t < dayMs);
+    if (kept.length) fixClients[c] = kept;
+  }
+  if (launch.proposeFix) fixClients[client] = [...fixRecent, now];
+  const fixDaily = { [day]: (s.fixDaily?.[day] ?? 0) + (launch.proposeFix ? 1 : 0) };
+
+  return { ok: true, state: { launches, active: launch.id, daily: { [day]: (s.daily[day] ?? 0) + 1 }, clients, fixDaily, fixClients } };
 }
 
 /** Frees the slot, for example when the dispatch failed or the run reached a terminal state. */
@@ -81,5 +107,10 @@ export function finishLaunch(s: LimitState, id: string, refund = false): LimitSt
     const d = utcDay(l.createdAt);
     if (daily[d]) daily[d] -= 1;
   }
-  return { ...s, launches, daily, active: s.active === id ? null : s.active };
+  let fixDaily = s.fixDaily;
+  if (refund && l.proposeFix && fixDaily) {
+    const d = utcDay(l.createdAt);
+    if (fixDaily[d]) fixDaily = { ...fixDaily, [d]: fixDaily[d] - 1 };
+  }
+  return { ...s, launches, daily, fixDaily, active: s.active === id ? null : s.active };
 }

@@ -14,4 +14,8 @@ export interface Env {
   LAUNCH_ENABLED: string;
   DAILY_CAP: string;
   PER_CLIENT_LAUNCHES_PER_HOUR: string;
+  /** Off unless exactly "true". The only switch that lets a visitor request remediation. */
+  PROPOSE_FIX_ENABLED?: string;
+  PROPOSE_FIX_DAILY_CAP?: string;
+  PROPOSE_FIX_PER_CLIENT_PER_DAY?: string;
 }

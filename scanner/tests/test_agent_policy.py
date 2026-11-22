@@ -285,3 +285,7 @@ def test_every_action_in_the_workflow_is_pinned_to_a_sha():
         m = re.search(r"uses:\s*(\S+)", line)
         if m:
             assert re.fullmatch(r"[\w./-]+@[0-9a-f]{40}", m.group(1)), m.group(1)
+
+
+def test_propose_fix_saves_the_pr_url_for_the_playground():
+    assert 'tee "$out/pr-url.txt"' in _job("propose-fix")

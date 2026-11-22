@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decideLaunch, emptyState, finishLaunch, type LimitConfig } from "../src/limits";
 import { isDemoId, LAUNCH_ID_RE } from "../src/demos";
 
-const cfg: LimitConfig = { enabled: true, dailyCap: 3, perClientPerHour: 2, activeTtlMs: 600_000, retainMs: 1e9 };
+const cfg: LimitConfig = { enabled: true, dailyCap: 3, perClientPerHour: 2, activeTtlMs: 600_000, retainMs: 1e9, proposeFixDailyCap: 2, proposeFixPerClientPerDay: 1 };
 const L = (id: string, t: number) => ({ id, demo: "crypt-keeper-mcp", createdAt: t });
 const T = Date.UTC(2026, 10, 20, 12);
 

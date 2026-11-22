@@ -13,6 +13,11 @@ WORKFLOW_REF = "main"
 LAUNCH_ENABLED = "true"
 DAILY_CAP = "30"
 PER_CLIENT_LAUNCHES_PER_HOUR = "3"
+# Remediation (draft PR) from the Playground. OFF unless exactly "true". Needs KIRO_API_KEY in the repo and
+# "Allow GitHub Actions to create pull requests"; see the README. Tighter limits than normal launches.
+PROPOSE_FIX_ENABLED = "false"
+PROPOSE_FIX_DAILY_CAP = "3"
+PROPOSE_FIX_PER_CLIENT_PER_DAY = "1"
 
 [[durable_objects.bindings]]
 name = "COORDINATOR"
@@ -34,6 +39,9 @@ WORKFLOW_REF = "main"
 LAUNCH_ENABLED = "true"
 DAILY_CAP = "10"
 PER_CLIENT_LAUNCHES_PER_HOUR = "3"
+PROPOSE_FIX_ENABLED = "false"
+PROPOSE_FIX_DAILY_CAP = "3"
+PROPOSE_FIX_PER_CLIENT_PER_DAY = "1"
 [[env.dev.durable_objects.bindings]]
 name = "COORDINATOR"
 class_name = "Coordinator"
