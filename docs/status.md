@@ -26,6 +26,7 @@ This page separates what is tested, what is implemented but never run live, and 
 |---|---|
 | Reusable scan through `self-scan.yml` | Task 20.5: first real run on PR #3 verified inputs, SHA fetch, summary, artifact and the failing gate. It exposed a `bash -e` bug that tests had missed, since fixed. The post-merge check that a push to `main` passes is still listed as open. |
 | Headless agent triage in `scan.yml` | Task 20.6a: two live runs on 2026-11-15. The first failed (install step lacked the key), the second passed. The triage text has had little review. |
+| `scan-repo.yml` by manual dispatch | [Run 45071479996](https://github.com/Fabr1ce/supplaiguard/actions/runs/45071479996), `workflow_dispatch` on `main` at commit `45a6b33`, 2026-11-22. The single job `scan` succeeded in about 10 seconds. Steps: Validate inputs, Check out SupplAIGuard, Set up Python, Scan, Publish job summary, Upload report, Gate. Verified through the public GitHub API. The report contents were not inspected, so this page makes no claim about the repository scanned or its findings. Task 9.2 of scan-github-repo (two public repositories, one with findings and one without) stays open. |
 | `demo-triage.yml` and the Pages results site | README: "Used by the demo site since the Pages commits in PR #6 and #7". Commits `172d3b7` and `39b91e5`. |
 
 ## Implemented But Never Run Live
@@ -35,8 +36,7 @@ This page separates what is tested, what is implemented but never run live, and 
 | `propose-fix` job opening a draft pull request | The README and the workflow header say it was never run on GitHub. Needs `KIRO_API_KEY` and the Actions setting for pull requests. |
 | Playground `proposeFix` toggle and result view | Depends on the job above. The README says "Not yet run end to end against GitHub". |
 | Playground Worker deployed and launching real runs | The repository has the code, tests and deploy notes. It records no live launch. |
-| Playground scan by URL (`SCAN_URL_ENABLED`) | Off by default. Fixtures and unit tests only: the GitHub dispatch of `scan-repo.yml`, the run lookup by `launch_id` and the artifact download are unverified offline. |
-| `scan-repo.yml` against a real public repository | Task 9.2 of scan-github-repo is open: it needs github.com and was not possible offline. A local fixture test covers the logic. |
+| Playground scan by URL (`SCAN_URL_ENABLED`) | Off by default. The Playground-triggered path is unverified: the Worker dispatch by `launch_id`, the run lookup, the artifact download and the results shaping are covered by fixtures and unit tests only. The manual dispatch of `scan-repo.yml` ran live (see above). |
 | `report-fix.yml` and `examples/consumer-report-fix.yml` | Task 25.2: written, not run against a real merged fix pull request. Its last commit removed an invalid `split()` expression. |
 | Full interactive coordinator run | Tasks 13.3, 13.4, 13.7, 19.2 and 33.5 are open: write prompts, verification honesty, the `Stop` hook review and the branch and pull request flow were never observed live. |
 | Dependabot behavior assumptions | Task 20.2 spike is open. |
@@ -62,3 +62,7 @@ This page separates what is tested, what is implemented but never run live, and 
 - The current content of the live Pages site.
 
 Back to the [index](README.md).
+
+## Example Targets For Scan By URL
+
+The Playground offers two public, deliberately vulnerable multi-agent projects as one-click examples: `opena2a-org/damn-vulnerable-ai-agent` and `GenAI-Security-Project/finbot-ctf`. They are third-party projects, and clicking one only fills the form. The scanner reads `uv.lock` and `poetry.lock` (added so FinBot's dependencies are checked), covered by offline tests with a mocked OSV. Neither repository has been scanned live from the build environment, because it had no network access, so no results are claimed here.

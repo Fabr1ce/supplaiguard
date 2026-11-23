@@ -156,6 +156,9 @@ export function statusLine(stepKey: string, status: FlavorStatus): string {
 
 /** Maps a real GitHub job and step name (see demo-triage.yml) to a step key. */
 export function stepKeyFor(jobName: string, stepName?: string): StepKey {
+  // A caller's job id prefixes the jobs of a reusable workflow: "check / scan", "check / agent-triage" (see scan.yml).
+  const called = /^.+ \/ (.+)$/.exec(jobName);
+  if (called) return reusableStepKey(called[1], stepName);
   if (/^propose/i.test(jobName)) return "fix";
   if (/^scan$/i.test(jobName)) {
     // scan-repo.yml: the single job "scan".
@@ -171,6 +174,22 @@ export function stepKeyFor(jobName: string, stepName?: string): StepKey {
     if (/^Copy the demo/.test(stepName)) return "copy";
     if (/^(Headless triage|Upload results)/.test(stepName)) return "triage";
     return "prepare";
+  }
+  return "unknown";
+}
+
+/** Jobs and steps of .github/workflows/scan.yml when called from another repository. Only real step names are mapped. */
+function reusableStepKey(job: string, stepName?: string): StepKey {
+  if (job === "scan") {
+    if (!stepName) return "prepare";
+    if (stepName === "Scan") return "scan";
+    if (/^(Publish job summary|Upload report|Gate)/.test(stepName)) return "publish";
+    return "prepare"; // validate inputs, checkout, download the scanner, set up Python, suppressions
+  }
+  if (job === "agent-triage") {
+    if (!stepName) return "prepare";
+    if (/^Triage the findings/.test(stepName)) return "triage";
+    return "prepare"; // gate, download report and agents, install the CLI
   }
   return "unknown";
 }

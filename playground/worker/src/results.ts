@@ -224,3 +224,103 @@ export function parseScanArtifact(zip: Uint8Array): ScanUrlResult {
     errorCount,
   };
 }
+
+/** Artifact the reusable scan workflow uploads. Same name the scan-by-URL flow reads. */
+export const PRIVATE_REPORT_ARTIFACT = "supplaiguard-report";
+
+const KNOWN_TYPES = new Set([
+  "vulnerable_dependency",
+  "insecure_mcp_configuration",
+  "excessive_tool_permissions",
+  "suspicious_agent_skill",
+  "insecure_integration_configuration",
+]);
+const RULE_ID_RE = /^[A-Z]{2,5}-\d{3}$/;
+const CONCLUSIONS = new Set(["success", "failure", "cancelled", "timed_out", "skipped", "failed_to_start"]);
+
+export interface PrivateResult {
+  kind: "private";
+  /** Always "incomplete" without a usable report. Never "clean" unless a valid report has no findings and no errors. */
+  status: ScanStatus;
+  /** 0 clean, 1 findings, 2 scan errors or incomplete. Same meaning as scanner/sg_scan.py. */
+  exitCode: 0 | 1 | 2;
+  complete: boolean;
+  findingsCount: number;
+  bySeverity: { critical: number; high: number; medium: number; low: number };
+  /** Rule ids matching the scanner's catalogue pattern (for example AGT-001). Anything else is not passed on. */
+  byRule: Record<string, number>;
+  /** Only the scanner's known finding types. Anything else is counted as "other". */
+  byType: Record<string, number>;
+  /** Fixed reason codes only. */
+  incompleteReasons: ("no_report" | "download_failed" | "bad_report" | "scan_errors" | "run_failed")[];
+  errorCount: number;
+  /** The run's own conclusion, mapped to a fixed set. A "failure" with a valid report is a finished scan with findings. */
+  runConclusion: string | null;
+  scannerVersion: string;
+}
+
+const MAX_RULES = 50;
+
+/**
+ * Reduces the private demo's report to counts. The repository is private but this page is public, so NOTHING from
+ * the report's text is passed on: no paths, evidence, descriptions, components or error messages. Only numbers,
+ * severities from a fixed set, rule ids matching the catalogue pattern and the scanner's known finding types.
+ * Fails closed: a missing, failed or malformed report is "incomplete", never "clean".
+ */
+export function parsePrivateArtifact(zip: Uint8Array | null, conclusion: string | null, downloadFailed = false): PrivateResult {
+  const reasons: PrivateResult["incompleteReasons"] = [];
+  let raw: any = null;
+  if (zip) {
+    try {
+      const files = unzipSync(zip, { filter: (f) => f.name === "findings.json" && f.originalSize < 2_000_000 });
+      const txt = files["findings.json"] ? strFromU8(files["findings.json"]) : null;
+      if (txt === null) reasons.push("no_report");
+      else raw = JSON.parse(txt);
+    } catch {
+      reasons.push("bad_report");
+    }
+  } else reasons.push(downloadFailed ? "download_failed" : "no_report");
+
+  const usable = !!raw && typeof raw === "object" && Array.isArray(raw.findings) && Array.isArray(raw.errors);
+  if (raw && !usable && !reasons.includes("bad_report")) reasons.push("bad_report");
+
+  const bySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
+  const byRule: Record<string, number> = {};
+  const byType: Record<string, number> = {};
+  let findingsCount = 0;
+  let errorCount = 0;
+  if (usable) {
+    for (const f of raw.findings as any[]) {
+      findingsCount++;
+      bySeverity[f && SEVERITIES.has(f.severity) ? (f.severity as keyof typeof bySeverity) : "medium"]++;
+      const t = f && typeof f.type === "string" && KNOWN_TYPES.has(f.type) ? f.type : "other";
+      byType[t] = (byType[t] ?? 0) + 1;
+      const r = f && typeof f.rule_id === "string" && RULE_ID_RE.test(f.rule_id) ? f.rule_id : null;
+      if (r && (r in byRule || Object.keys(byRule).length < MAX_RULES)) byRule[r] = (byRule[r] ?? 0) + 1;
+    }
+    errorCount = Math.min((raw.errors as unknown[]).length, 10_000);
+    if (errorCount) reasons.push("scan_errors");
+  }
+
+  const runConclusion = conclusion && CONCLUSIONS.has(conclusion) ? conclusion : null;
+  // A valid report with findings is a finished scan whatever the run conclusion says: the gate fails the run on purpose.
+  // Without findings, a non-success run cannot be called clean.
+  if (usable && !reasons.length && findingsCount === 0 && runConclusion !== "success") reasons.push("run_failed");
+
+  const exitCode: 0 | 1 | 2 = reasons.length ? 2 : findingsCount > 0 ? 1 : 0;
+  const status: ScanStatus = exitCode === 2 ? "incomplete" : exitCode === 1 ? "findings" : "clean";
+  return {
+    kind: "private",
+    status,
+    exitCode,
+    complete: status !== "incomplete",
+    findingsCount,
+    bySeverity,
+    byRule,
+    byType,
+    incompleteReasons: [...new Set(reasons)],
+    errorCount,
+    runConclusion,
+    scannerVersion: usable ? str(raw.scanner_version, 20) : "",
+  };
+}

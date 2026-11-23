@@ -22,11 +22,12 @@ export default function Execution() {
   const done = execution?.status === "completed";
 
   useEffect(() => {
-    if (done && execution?.conclusion === "success" && !sim) {
+    // A private run that fails its gate on purpose (findings at or above the threshold) still has a report to show.
+    if (done && (execution?.conclusion === "success" || (demo?.private && execution?.conclusion === "failure")) && !sim) {
       const t = setTimeout(() => nav(`/run/${id}/results`), 2500);
       return () => clearTimeout(t);
     }
-  }, [done, execution?.conclusion, id, nav]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [done, execution?.conclusion, id, nav, demo?.private]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const flavor = currentFlavor(execution?.status, execution?.conclusion, execution?.jobs ?? []);
   const mode: LabMode | null = !execution ? null : flavor.status === "success" ? "alive" : done ? "cold" : "active";
@@ -61,7 +62,7 @@ export default function Execution() {
         </section>
         <section className="glass p-5 lg:col-span-2" aria-labelledby="ed">
           <h2 id="ed" className="mb-3 text-lg font-semibold">Details</h2>
-          {execution ? <ExecutionDetails e={execution} /> : <p className="text-sm text-mute">Loading…</p>}
+          {execution ? <ExecutionDetails e={execution} privateRepo={demo?.private === true} /> : <p className="text-sm text-mute">Loading…</p>}
         </section>
       </div>
       <details className="glass p-5">
@@ -71,7 +72,9 @@ export default function Execution() {
       {done && (
         <div className="flex flex-wrap items-center gap-3">
           <Link to={`/run/${id}/results`} className="rounded-xl bg-purple px-4 py-2.5 text-sm font-semibold text-ground hover:bg-purple/90">View security results</Link>
-          {execution?.conclusion !== "success" && <span className="text-sm text-mute">The run did not finish successfully. Results may be missing.</span>}
+          {execution?.conclusion !== "success" && (demo?.private && execution?.conclusion === "failure"
+            ? <span className="text-sm text-mute">The check reports failure when it finds issues at or above its threshold. The report is still read for the results page.</span>
+            : <span className="text-sm text-mute">The run did not finish successfully. Results may be missing.</span>)}
         </div>
       )}
     </div>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import clientSource from "./repoRef.ts?raw";
 import workerSource from "../../worker/src/repoRef.ts?raw";
-import { checkRepoInput, describeScan } from "./scanUrl";
+import { EXAMPLE_TARGETS, checkRepoInput, describeScan } from "./scanUrl";
 import { parseRepoRef } from "./repoRef";
 import type { ScanUrlResults } from "../types/execution";
 import corpus from "../../../scanner/tests/fixtures/injection_corpus.json";
@@ -64,5 +64,11 @@ describe("describeScan", () => {
   });
   it("mentions agent-instruction-like text as flagged, not followed", () => {
     expect(describeScan({ ...base, status: "findings", exitCode: 1, findingsCount: 1, suspiciousContent: 1 }).lines.join(" ")).toMatch(/flagged, not followed/);
+  });
+});
+
+describe("example targets", () => {
+  it("every example passes the same validation a typed repository does", () => {
+    for (const t of EXAMPLE_TARGETS) expect(checkRepoInput(t.repo, "").ok, t.repo).toBe(true);
   });
 });

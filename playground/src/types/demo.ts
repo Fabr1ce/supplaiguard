@@ -11,12 +11,18 @@ export interface DemoFinding {
   recommendedVersion: string;
 }
 
+/**
+ * A demo card. The public demos carry the scanner's real expected findings. A private demo (see "Private Demo" in the
+ * README) carries ONLY id, name, description and `private: true`: its contents are deliberately not described here.
+ */
 export interface Demo {
   id: string;
   name: string;
   description: string;
-  categories: string[];
-  bySeverity: Record<string, number>;
-  scannerVersion: string;
-  findings: DemoFinding[];
+  /** True for a demo that runs in a separate private repository. Such an entry has none of the fields below. */
+  private?: boolean;
+  categories?: string[];
+  bySeverity?: Record<string, number>;
+  scannerVersion?: string;
+  findings?: DemoFinding[];
 }

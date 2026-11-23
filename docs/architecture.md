@@ -19,7 +19,7 @@ flowchart TB
         fetch["github_fetch.py<br/>hardened shallow clone"]
         gate["fix_gate.py<br/>allow-list for proposed fixes"]
         evo["evolution_report.py<br/>sanitized fix report"]
-        site["build_site.py<br/>Pages results site"]
+        site["build_site.py<br/>Pages homepage + results"]
     end
 
     subgraph ci["GitHub Actions (.github/workflows)"]
@@ -69,7 +69,7 @@ flowchart TB
 | `mcp.json` | MCP rules MCP-001 to MCP-005 | `insecure_mcp_configuration` |
 | `.kiro/agents/*.json` | Agent rules AGT-001 to AGT-004 | `excessive_tool_permissions` |
 | `SKILL.md`, agent and MCP strings, README, CONTRIBUTING, top level `docs/*.md`, file names, HEAD commit message | Phrase rules SKL-001 to SKL-005 and the injection detector | `suspicious_agent_skill` |
-| `package-lock.json`, `requirements*.txt` | OSV.dev batch query for every installed name and version | `vulnerable_dependency` |
+| `package-lock.json`, `uv.lock`, `poetry.lock`, `requirements*.txt` | OSV.dev batch query for every installed name and version (uv and poetry: registry packages only) | `vulnerable_dependency` |
 
 The rule catalog is [`.kiro/steering/ai-component-security-rules.md`](../.kiro/steering/ai-component-security-rules.md). Scoring follows [`.kiro/steering/severity-and-confidence.md`](../.kiro/steering/severity-and-confidence.md).
 
@@ -89,7 +89,7 @@ Other scanner features:
 | `scanner/github_fetch.py` | Parses `owner/name` or a github.com URL and does the hardened shallow clone. |
 | `scanner/fix_gate.py` | Compares the original and the agent's edited copy. Allows only manifests and agent or MCP config, refuses symlinks, absolute paths and `..`, and reports major version changes and new dependencies. |
 | `scanner/evolution_report.py` | Builds a sanitized before and after report field by field from an allow-list. A finding counts as fixed only if the after scan was complete. |
-| `scanner/build_site.py` | Builds the static Pages results site from the `demo-triage-*` artifacts. Escapes all scanned and agent text. |
+| `scanner/build_site.py` | Builds the static Pages homepage (links to the Playground, shows the latest run results) from the `demo-triage-*` artifacts. Escapes all scanned and agent text. |
 
 ### The Kiro Layer
 

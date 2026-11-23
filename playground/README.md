@@ -54,10 +54,13 @@ Lets a visitor name a **public GitHub repository** and have SupplAIGuard scan it
 `sg_scan.py --github OWNER/REPO` and of the manual workflow `scan-repo.yml`. It uses the deterministic scanner only: no agent, no
 model, no secrets. Nothing from the scanned repository is executed, installed or built.
 
-**Status.** This path has **not run live on GitHub**. It is covered by fixtures and unit tests only (the validator against the Python
-reference, the Worker with a mocked GitHub, the results shaping, the UI services). The real GitHub dispatch, the run lookup by `run-name`
-and the artifact download for `scan-repo.yml` are unverified offline. The scanner's own URL scan has likewise never been run against a real
-repository from this environment (see `docs/status.md`).
+**Status.** `scan-repo.yml` ran live once by manual dispatch (run 45071479996: deterministic scan, summary and artifact steps succeeded; see
+`docs/status.md`). The Playground-triggered path has **not run live**. It is covered by fixtures and unit tests only (the validator against the
+Python reference, the Worker with a mocked GitHub, the results shaping, the UI services). The Worker dispatch by `launch_id`, the run lookup by
+`run-name`, the artifact download and the results shaping are unverified against real GitHub.
+
+**Deterministic only.** URL scans are deterministic only. No agent or model runs on a scanned repository, because it is untrusted and the triage
+agent needs a secret. Agent triage is available on the four demos.
 
 **Where it is set.** Only in the Worker: `SCAN_URL_ENABLED` in `worker/wrangler.toml` (both `[vars]` and `[env.dev.vars]`, default `"false"`), or in
 the Cloudflare dashboard under Settings > Variables, no deploy needed. Only the exact string `"true"` turns it on. Unset, `"false"`, `"TRUE"`, `"1"`
@@ -116,6 +119,63 @@ dispatching `scan-repo.yml` (a second workflow file in the same repository), lis
 
 **Turn it off.** Set `SCAN_URL_ENABLED` to `"false"` (dashboard, or `wrangler.toml` and redeploy). The card disappears and any repository request gets a 403.
 To stop it at the source, disable the `scan-repo.yml` workflow in the repository's Actions settings.
+
+## Private Demo
+
+A fourth demo card, "Ledgerlight", runs in a **separate private repository** through that repository's own GitHub Actions. It uses the public
+reusable workflow `.github/workflows/scan.yml` of this repository, exactly as an outside project would.
+
+**Why it is private.** In the three public demos, the code and the expected results sit in this repository, where an agent triaging them could
+read the answers. For this demo the code lives in the private repository and the answers are kept outside any repository. A visitor sees
+only the results page. Nothing in this repository describes what is inside it, and the card carries no expected counts, severities or rule ids
+(a test checks that the card entry has only `id`, `name`, `description` and `private`).
+
+**Status.** Not run live. Everything here is covered by unit tests with a mocked GitHub. The dispatch, the run lookup by `run-name`, the artifact
+download and the results shaping are unverified against real GitHub, and the private repository's workflow has not run with a real `KIRO_API_KEY`.
+
+**Worker variables** (in `worker/wrangler.toml` under `[vars]` and `[env.dev.vars]`, or in the dashboard):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PRIVATE_DEMO_REPO` | `""` | `owner/name` of the private repository. Empty or invalid means not connected. |
+| `PRIVATE_DEMO_WORKFLOW_FILE` | `dependency-check.yml` | Workflow file to dispatch. |
+| `PRIVATE_DEMO_REF` | `main` | Branch to dispatch on. |
+| `PRIVATE_DEMO_ID` | `ledgerlight` | Demo id the browser sends. Cannot be a public demo id or `scan-url`. |
+| `PRIVATE_DEMO_DAILY_CAP` | `6` | Launches per UTC day, all visitors. |
+| `PRIVATE_DEMO_PER_CLIENT_PER_DAY` | `2` | Launches per client per day. |
+
+These caps are in addition to the normal limits (one active run, hourly per-client limit, daily cap). A failed dispatch refunds the reservation.
+
+**How to connect it.**
+1. Create the private repository and push the demo to it.
+2. Add the repository secret `KIRO_API_KEY` (used only for manual runs).
+3. In `.github/workflows/dependency-check.yml` of that repository, replace both `<FULL_COMMIT_SHA>` placeholders with a public SupplAIGuard commit
+   SHA that contains the agent-triage input of `scan.yml`.
+4. Enable Actions on the repository.
+5. Install the Worker's GitHub App on the private repository as well, with the same permissions (Actions: Read and write, Metadata: Read-only).
+   Contents access is not needed. One installation can cover both repositories.
+6. Set `PRIVATE_DEMO_REPO` and redeploy (or set it in the dashboard).
+
+**What the Worker does.**
+- `/api/health` reports `privateDemoAvailable` (a boolean). The repository name is never in any response except the run link.
+- A launch with `{ "demoId": "ledgerlight" }` when not connected gets a **503** `private_demo_unavailable`, before anything is reserved. The card shows
+  "Not connected yet".
+- `proposeFix` is **ignored** for this demo (a non-boolean value is still a 400): the private workflow has no propose-fix path.
+- Dispatch sends only `{ "launch_id": ... }` as inputs, on `PRIVATE_DEMO_REF`, with an installation token whose `repositories` scope is the
+  private repository alone. The token is held in memory only and never logged. The run is found by its `run-name`, which is the launch id.
+- Results come from the artifact `supplaiguard-report`. The Worker passes on only counts by severity, counts per rule id (catalogue pattern only),
+  known finding types, the scan status, and the scanner exit semantics (0 clean, 1 findings, 2 errors or incomplete). No file path, evidence,
+  description, component or error text is passed on.
+- A run that concludes `failure` with a valid report is a finished scan with findings: the check fails on findings at or above its threshold on
+  purpose. A missing, expired, unreadable or errored report is "incomplete", never clean.
+
+**What a visitor sees.** The run link points into the private repository, so GitHub shows a 404 to anyone without access. The Results page says so
+and relies on the on-page counts. There is no triage text for this target: the agent summary is shown in the private run, not on the Results page.
+
+**Limitation.** In the reusable `scan.yml`, the `agent-triage` job runs in an empty directory with only the scan report. For this demo the agent
+sees the report but not the source.
+
+**Turn it off.** Set `PRIVATE_DEMO_REPO` to `""` and redeploy (or in the dashboard). The card shows "Not connected yet".
 
 ## Laboratory Atmosphere
 
@@ -191,7 +251,7 @@ Development and production are separate: `wrangler.toml` has `[vars]` for produc
 ## GitHub App (recommended)
 
 1. GitHub > Settings > Developer settings > GitHub Apps > New. No webhook. Repository permissions: **Actions: Read and write**, Metadata: Read-only. Nothing else.
-2. Install it on **only** `Fabr1ce/supplaiguard`.
+2. Install it on **only** `Fabr1ce/supplaiguard` (and, if you connect the Private Demo, the one private repository).
 3. Generate a private key (`.pem`). Convert it to PKCS#8, which WebCrypto needs:
    `openssl pkcs8 -topk8 -nocrypt -in app.pem -out app-pkcs8.pem`
 4. Store the secrets in the Worker (never in the repository):

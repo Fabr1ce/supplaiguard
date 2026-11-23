@@ -16,7 +16,7 @@ export default function ExecutionHeader({ demo, execution, id }: { demo?: Demo; 
     <header className="glass p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs text-green">{demo?.categories.join(" · ")}</p>
+          <p className="text-xs text-green">{demo?.private ? "Private repository" : demo?.categories?.join(" · ")}</p>
           <h1 className="text-2xl font-semibold">{demo?.name ?? (execution?.scanUrl ? `Scan: ${execution.scanUrl.repo}` : execution?.demoId) ?? "Execution"}</h1>
           <p className="mt-1 font-mono text-xs text-mute">Execution {id}</p>
         </div>
@@ -28,6 +28,7 @@ export default function ExecutionHeader({ demo, execution, id }: { demo?: Demo; 
             <ExternalLink className="h-4 w-4" aria-hidden /> Open in GitHub Actions
           </a>
         )}
+        {execution?.runUrl && demo?.private && <p className="basis-full text-xs text-mute">This run is in a private repository. GitHub shows a 404 unless you have access; the results appear on this site.</p>}
         <button type="button" onClick={copy} className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-1.5 hover:border-purple">
           {copied ? <Check className="h-4 w-4 text-ok" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />} {copied ? "Copied" : "Copy link"}
         </button>

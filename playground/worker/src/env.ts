@@ -24,4 +24,17 @@ export interface Env {
   SCAN_URL_PER_CLIENT_PER_DAY?: string;
   /** Workflow file for URL scans. Defaults to scan-repo.yml. */
   SCAN_URL_WORKFLOW_FILE?: string;
+  /**
+   * The private demo (a workflow in a separate private repository), as owner/name. Empty or invalid means NOT
+   * configured: launches are refused and /api/health reports privateDemoAvailable: false.
+   */
+  PRIVATE_DEMO_REPO?: string;
+  /** Defaults to dependency-check.yml. */
+  PRIVATE_DEMO_WORKFLOW_FILE?: string;
+  /** Branch to dispatch on. Defaults to main. */
+  PRIVATE_DEMO_REF?: string;
+  /** Demo id the browser uses. Defaults to ledgerlight. */
+  PRIVATE_DEMO_ID?: string;
+  PRIVATE_DEMO_DAILY_CAP?: string;
+  PRIVATE_DEMO_PER_CLIENT_PER_DAY?: string;
 }

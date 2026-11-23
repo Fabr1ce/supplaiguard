@@ -12,6 +12,8 @@ export type LaunchFailure = {
 
 export type LaunchRequest =
   | { ok: true; demoId: DemoId; proposeFix: boolean }
+  /** The private demo. `proposeFix` is not offered for it: any value is type-checked and then ignored. */
+  | { ok: true; privateDemo: string }
   /** Scan by URL. `repo` is the normalized owner/repo and `ref` the validated branch or tag: the only values ever passed on. */
   | { ok: true; scanUrl: { repo: string; ref: string | null } }
   | LaunchFailure;
@@ -21,10 +23,11 @@ const unknownDemo: LaunchFailure = { ok: false, code: "unknown_demo", message: "
 /**
  * Strict parse of the launch body. Exactly one of two forms:
  *  - demo:  { demoId, proposeFix? }
+ *    `opts.privateDemoId` (from the Worker's own config, never from the request) adds exactly one more accepted id.
  *  - scan:  { repoUrl, ref? }   (only when `scanUrlEnabled`; otherwise rejected, there is no safe fallback)
  * Unknown fields, wrong types, both forms together, or neither are rejected.
  */
-export function parseLaunchRequest(body: unknown, opts: { scanUrlEnabled?: boolean } = {}): LaunchRequest {
+export function parseLaunchRequest(body: unknown, opts: { scanUrlEnabled?: boolean; privateDemoId?: string | null } = {}): LaunchRequest {
   if (body === null || typeof body !== "object" || Array.isArray(body)) return unknownDemo;
   const o = body as Record<string, unknown>;
   const keys = Object.keys(o);
@@ -43,7 +46,9 @@ export function parseLaunchRequest(body: unknown, opts: { scanUrlEnabled?: boole
   }
 
   for (const k of keys) if (!DEMO_KEYS.has(k)) return unknownDemo;
-  if (!isDemoId(o.demoId)) return unknownDemo;
+  const isPrivate = !!opts.privateDemoId && o.demoId === opts.privateDemoId;
+  if (!isPrivate && !isDemoId(o.demoId)) return unknownDemo;
   if ("proposeFix" in o && typeof o.proposeFix !== "boolean") return { ok: false, code: "bad_request", message: "proposeFix must be true or false." };
-  return { ok: true, demoId: o.demoId, proposeFix: o.proposeFix === true };
+  if (isPrivate) return { ok: true, privateDemo: o.demoId as string };
+  return { ok: true, demoId: o.demoId as DemoId, proposeFix: o.proposeFix === true };
 }

@@ -24,3 +24,6 @@ assets/build_logo.py
 *.key
 *.swp
 *.swo
+
+# Private demo repositories (separate git repos, never part of this one)
+private-demo/

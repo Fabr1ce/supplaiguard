@@ -16,7 +16,7 @@ How to set up, run and troubleshoot SupplAIGuard. The flow behind each item is i
 | Worker secrets `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` | `npx wrangler secret put` in `playground/worker` | The Worker's GitHub App login. The key must be PKCS#8. |
 | GitHub App for the Worker | GitHub Developer settings | Repository permissions `Actions: Read and write` and `Metadata: Read-only`, installed only on this repository. |
 | Worker variable `PROPOSE_FIX_ENABLED` | `playground/worker/wrangler.toml` or the Cloudflare dashboard | Off unless exactly `"true"`. Default `"false"`. |
-| Worker variables `SCAN_URL_ENABLED`, `SCAN_URL_DAILY_CAP`, `SCAN_URL_PER_CLIENT_PER_DAY`, `SCAN_URL_WORKFLOW_FILE` | same | Scan by URL from the Playground. Off unless `SCAN_URL_ENABLED` is exactly `"true"`. Defaults `"false"`, `5`, `1`, `scan-repo.yml`. Never run live. |
+| Worker variables `SCAN_URL_ENABLED`, `SCAN_URL_DAILY_CAP`, `SCAN_URL_PER_CLIENT_PER_DAY`, `SCAN_URL_WORKFLOW_FILE` | same | Scan by URL from the Playground. Off unless `SCAN_URL_ENABLED` is exactly `"true"`. Defaults `"false"`, `5`, `1`, `scan-repo.yml`. The Playground-triggered path has not run live. |
 | Worker variable `LAUNCH_ENABLED` | same | Kill switch. `"false"` stops launches without a deploy. |
 | Variable `SG_EVOLUTION_OPT_IN` = `true` | Consumer repository variables | Turns on `report-fix.yml` there. |
 | Secrets `SG_APP_ID`, `SG_APP_PRIVATE_KEY` | Consumer repository | The GitHub App installed only on the SupplAIGuard repository (`Contents` and `Pull requests` write), used by `report-fix.yml`. |
@@ -74,7 +74,7 @@ kiro-cli chat --agent supplaiguard-coordinator "Run a full SupplAIGuard scan."
 | `demo-triage.yml` | Actions > Demo triage > Run workflow. Choose a demo and optionally `propose-fix`. | Needs `KIRO_API_KEY` for triage. Publishes Pages. |
 | `report-fix.yml` | Copy `examples/consumer-report-fix.yml`, pin both SHAs, set `SG_EVOLUTION_OPT_IN`. | Never run live. |
 
-Results from `demo-triage.yml` appear on the Pages site after the first run. Before then the site returns 404.
+The Pages root is the homepage: it leads to the Playground (`/playground/`) and shows the latest `demo-triage.yml` run lower down. The latest run results appear after the first run. Before then the site returns 404.
 
 ### Turn Off Remediation From The Playground
 
@@ -82,7 +82,11 @@ Set `PROPOSE_FIX_ENABLED` to `"false"` in the dashboard or `wrangler.toml` (then
 
 ### Turn Off Scan By URL From The Playground
 
-Set `SCAN_URL_ENABLED` to `"false"` in the dashboard or `wrangler.toml` (then redeploy). The card disappears and a repository request gets a 403. To stop it at the source, disable `scan-repo.yml` in Settings > Actions. This path has not run live on GitHub, so the first enabled launch is also its first real test: watch the run. See [`playground/README.md`](../playground/README.md).
+Set `SCAN_URL_ENABLED` to `"false"` in the dashboard or `wrangler.toml` (then redeploy). The card disappears and a repository request gets a 403. To stop it at the source, disable `scan-repo.yml` in Settings > Actions. The workflow itself ran live once by manual dispatch (run 45071479996), but the Playground-triggered path (Worker dispatch, run lookup, artifact download) has not, so the first enabled launch is its first real test: watch the run. See [`playground/README.md`](../playground/README.md).
+
+### Connect Or Disconnect The Private Demo
+
+The fourth Playground card runs in a separate private repository and its own Actions. Set `PRIVATE_DEMO_REPO` (`owner/name`) in the dashboard or `wrangler.toml` and redeploy to connect it; set it to `""` to disconnect. Before that, the private repository needs the secret `KIRO_API_KEY`, real commit SHAs in place of the `<FULL_COMMIT_SHA>` placeholders, Actions enabled, and the Worker's GitHub App installed on it (Actions: Read and write, Metadata: Read-only). Not run live: the first launch is its first real test. See "Private Demo" in [`playground/README.md`](../playground/README.md).
 
 ## Troubleshooting
 

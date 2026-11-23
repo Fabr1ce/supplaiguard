@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import type { PrivateTarget } from "./privateDemo";
 
 const API = "https://api.github.com";
 const TIMEOUT_MS = 8000;
@@ -43,28 +44,30 @@ async function gh(url: string, init: RequestInit & { token: string }): Promise<R
   }
 }
 
-let cached: { token: string; exp: number } | null = null;
+/** In-memory only, one entry per repository. Tokens are never logged or returned. */
+const cached = new Map<string, { token: string; exp: number }>();
 
-/** Installation token limited to this one repository and to Actions access. */
-async function installationToken(env: Env): Promise<string> {
-  if (cached && cached.exp > Date.now() + 60_000) return cached.token;
+/** Installation token limited to ONE repository (the public one, or the private demo's) and to Actions access. */
+async function installationToken(env: Env, target?: PrivateTarget): Promise<string> {
+  const repo = target ? `${target.owner}/${target.repo}` : `${env.GITHUB_OWNER}/${env.GITHUB_REPO}`;
+  const hit = cached.get(repo);
+  if (hit && hit.exp > Date.now() + 60_000) return hit.token;
   const jwt = await appJwt(env);
-  const repo = `${env.GITHUB_OWNER}/${env.GITHUB_REPO}`;
   const inst = await gh(`${API}/repos/${repo}/installation`, { token: jwt });
   if (!inst.ok) throw new GitHubError(`installation lookup ${inst.status}`);
   const { id } = (await inst.json()) as { id: number };
   const res = await gh(`${API}/app/installations/${id}/access_tokens`, {
     token: jwt,
     method: "POST",
-    body: JSON.stringify({ repositories: [env.GITHUB_REPO], permissions: { actions: "write" } }),
+    body: JSON.stringify({ repositories: [repo.split("/")[1]], permissions: { actions: "write" } }),
   });
   if (!res.ok) throw new GitHubError(`token ${res.status}`);
   const t = (await res.json()) as { token: string; expires_at: string };
-  cached = { token: t.token, exp: Date.parse(t.expires_at) };
+  cached.set(repo, { token: t.token, exp: Date.parse(t.expires_at) });
   return t.token;
 }
 
-const repoPath = (env: Env) => `${API}/repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}`;
+const repoPath = (env: Env, target?: PrivateTarget) => `${API}/repos/${target ? `${target.owner}/${target.repo}` : `${env.GITHUB_OWNER}/${env.GITHUB_REPO}`}`;
 
 /** `propose-fix` is added to the workflow inputs only when asked for; the workflow input defaults to false. */
 export async function dispatch(env: Env, demo: string, launchId: string, proposeFix = false): Promise<void> {
@@ -73,6 +76,20 @@ export async function dispatch(env: Env, demo: string, launchId: string, propose
     token,
     method: "POST",
     body: JSON.stringify({ ref: env.WORKFLOW_REF, inputs: { demo, launch_id: launchId, ...(proposeFix ? { "propose-fix": "true" } : {}) } }),
+  });
+  if (res.status !== 204) throw new GitHubError(`dispatch ${res.status}`);
+}
+
+/**
+ * Dispatches the private demo's workflow. The ONLY input sent is launch_id: that workflow has no other inputs
+ * (GitHub rejects unknown ones with 422) and no propose-fix path.
+ */
+export async function dispatchPrivate(env: Env, target: PrivateTarget, launchId: string): Promise<void> {
+  const token = await installationToken(env, target);
+  const res = await gh(`${repoPath(env, target)}/actions/workflows/${target.workflowFile}/dispatches`, {
+    token,
+    method: "POST",
+    body: JSON.stringify({ ref: target.ref, inputs: { launch_id: launchId } }),
   });
   if (res.status !== 204) throw new GitHubError(`dispatch ${res.status}`);
 }
@@ -107,20 +124,20 @@ export interface RunInfo {
   head_sha: string;
 }
 
-export async function getRun(env: Env, runId: number): Promise<RunInfo | null> {
-  const token = await installationToken(env);
-  const res = await gh(`${repoPath(env)}/actions/runs/${runId}`, { token });
+export async function getRun(env: Env, runId: number, target?: PrivateTarget): Promise<RunInfo | null> {
+  const token = await installationToken(env, target);
+  const res = await gh(`${repoPath(env, target)}/actions/runs/${runId}`, { token });
   if (res.status === 404) return null;
   if (!res.ok) throw new GitHubError(`run ${res.status}`);
   return (await res.json()) as RunInfo;
 }
 
 /** The dispatch response has no run id, so find the run whose name carries our launch id. */
-export async function findRun(env: Env, launchId: string, since: number, workflowFile: string = env.WORKFLOW_FILE): Promise<RunInfo | null> {
-  const token = await installationToken(env);
+export async function findRun(env: Env, launchId: string, since: number, workflowFile: string = env.WORKFLOW_FILE, target?: PrivateTarget): Promise<RunInfo | null> {
+  const token = await installationToken(env, target);
   const created = new Date(since - 60_000).toISOString().slice(0, 19) + "Z";
   const res = await gh(
-    `${repoPath(env)}/actions/workflows/${workflowFile}/runs?event=workflow_dispatch&per_page=30&created=%3E%3D${encodeURIComponent(created)}`,
+    `${repoPath(env, target)}/actions/workflows/${workflowFile}/runs?event=workflow_dispatch&per_page=30&created=%3E%3D${encodeURIComponent(created)}`,
     { token },
   );
   if (!res.ok) throw new GitHubError(`list ${res.status}`);
@@ -135,9 +152,9 @@ export interface JobInfo {
   steps: { name: string; status: string; conclusion: string | null }[];
 }
 
-export async function getJobs(env: Env, runId: number): Promise<JobInfo[]> {
-  const token = await installationToken(env);
-  const res = await gh(`${repoPath(env)}/actions/runs/${runId}/jobs?per_page=30`, { token });
+export async function getJobs(env: Env, runId: number, target?: PrivateTarget): Promise<JobInfo[]> {
+  const token = await installationToken(env, target);
+  const res = await gh(`${repoPath(env, target)}/actions/runs/${runId}/jobs?per_page=30`, { token });
   if (!res.ok) throw new GitHubError(`jobs ${res.status}`);
   const j = (await res.json()) as { jobs: (JobInfo & { steps?: JobInfo["steps"] })[] };
   return j.jobs.map((x) => ({
@@ -149,13 +166,13 @@ export async function getJobs(env: Env, runId: number): Promise<JobInfo[]> {
 }
 
 /** Downloads the artifact zip for the run and returns its bytes. */
-export async function getArtifactZip(env: Env, runId: number, name: string): Promise<Uint8Array | null> {
-  const token = await installationToken(env);
-  const list = await gh(`${repoPath(env)}/actions/runs/${runId}/artifacts?name=${encodeURIComponent(name)}`, { token });
+export async function getArtifactZip(env: Env, runId: number, name: string, target?: PrivateTarget): Promise<Uint8Array | null> {
+  const token = await installationToken(env, target);
+  const list = await gh(`${repoPath(env, target)}/actions/runs/${runId}/artifacts?name=${encodeURIComponent(name)}`, { token });
   if (!list.ok) throw new GitHubError(`artifacts ${list.status}`);
   const a = ((await list.json()) as { artifacts: { id: number; expired: boolean; size_in_bytes: number }[] }).artifacts[0];
   if (!a || a.expired || a.size_in_bytes > 5_000_000) return null;
-  const zip = await gh(`${repoPath(env)}/actions/artifacts/${a.id}/zip`, { token });
+  const zip = await gh(`${repoPath(env, target)}/actions/artifacts/${a.id}/zip`, { token });
   if (!zip.ok) throw new GitHubError(`zip ${zip.status}`);
   return new Uint8Array(await zip.arrayBuffer());
 }

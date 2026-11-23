@@ -14,6 +14,16 @@ export function checkRepoInput(repo: string, ref: string): RepoInput {
   return { ok: false, field: r.message.startsWith("Branch or tag") ? "ref" : "repo", message: r.message };
 }
 
+/**
+ * Public, intentionally vulnerable multi-agent projects offered as one-click examples. Clicking one only fills the
+ * form; the visitor still presses Scan, and the same validation and limits apply. Both are third-party projects
+ * that we did not write, and we scan them as read-only inputs.
+ */
+export const EXAMPLE_TARGETS = [
+  { repo: "opena2a-org/damn-vulnerable-ai-agent", label: "Damn Vulnerable AI Agent", note: "Many deliberately weak agents over MCP and A2A (JavaScript)" },
+  { repo: "GenAI-Security-Project/finbot-ctf", label: "OWASP FinBot CTF", note: "Multi-agent finance app built for capture-the-flag play (Python, uv.lock)" },
+] as const;
+
 /** Plain-language reasons a scan could not be completed. Fixed text only. */
 export const REASON_TEXT: Record<string, string> = {
   fetch_failed: "The repository could not be fetched (it may not exist, may be private, or may be too large).",
