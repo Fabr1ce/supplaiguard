@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { GitBranch } from "lucide-react";
-import { checkRepoInput } from "../../services/scanUrl";
+import { EXAMPLE_TARGETS, checkRepoInput } from "../../services/scanUrl";
 
 /** Shown only when the service says scanning by URL is on. Quick feedback only: the Worker validates again. */
 export default function ScanUrlCard({ onLaunch, launching, blocked }: { onLaunch: (repo: string, ref: string | null) => void; launching: boolean; blocked: string | null }) {
@@ -66,6 +66,24 @@ export default function ScanUrlCard({ onLaunch, launching, blocked }: { onLaunch
             className="mt-1 w-full rounded-lg border border-line bg-transparent px-3 py-2 font-mono text-sm"
           />
           {refError && <p id="scan-url-ref-err" role="alert" className="mt-1 text-sm text-bad">{refError}</p>}
+        </div>
+        <div className="sm:col-span-3">
+          <p className="text-sm text-mute">Or try a public, deliberately vulnerable multi-agent project (fills the form; you still press Scan):</p>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {EXAMPLE_TARGETS.map((t) => (
+              <li key={t.repo}>
+                <button
+                  type="button"
+                  disabled={launching}
+                  onClick={() => { setRepo(t.repo); setRef(""); setTouched(true); }}
+                  title={t.note}
+                  className="rounded-lg border border-line px-3 py-1.5 text-left text-sm hover:border-purple disabled:opacity-50"
+                >
+                  <span className="font-medium">{t.label}</span> <span className="font-mono text-xs text-mute">{t.repo}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
         <div className="sm:col-span-3 flex flex-wrap items-center gap-3">
           <button type="submit" disabled={!canLaunch} className="rounded-xl bg-purple px-4 py-2.5 text-sm font-semibold text-ground hover:bg-purple/90 disabled:cursor-not-allowed disabled:opacity-50">
