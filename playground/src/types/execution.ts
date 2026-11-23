@@ -92,3 +92,27 @@ export interface ScanUrlResults {
   nothingRecognised: boolean;
   errorCount: number;
 }
+
+/**
+ * Result of the private demo. Numbers, enums, catalogue rule ids and known finding types only: the repository is
+ * private but this page is public, so no path, evidence, description or component name ever reaches the browser.
+ */
+export interface PrivateResults {
+  kind: "private";
+  launchId: string;
+  demoId: string;
+  /** Link to the run in the private repository. A visitor without access gets a 404 from GitHub. */
+  runUrl: string;
+  /** 0 clean, 1 findings, 2 scan errors or incomplete. */
+  exitCode: 0 | 1 | 2;
+  status: "clean" | "findings" | "incomplete";
+  complete: boolean;
+  findingsCount: number;
+  bySeverity: { critical: number; high: number; medium: number; low: number };
+  byRule: Record<string, number>;
+  byType: Record<string, number>;
+  incompleteReasons: string[];
+  errorCount: number;
+  runConclusion: string | null;
+  scannerVersion: string;
+}

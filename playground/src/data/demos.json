@@ -340,5 +340,11 @@
         "recommendedVersion": "1.2.6"
       }
     ]
+  },
+  {
+    "id": "ledgerlight",
+    "name": "Ledgerlight",
+    "description": "A small AI bookkeeping assistant that lives in its own private repository and runs SupplAIGuard through its own GitHub Actions. You cannot read its code; you only see the results.",
+    "private": true
   }
 ]

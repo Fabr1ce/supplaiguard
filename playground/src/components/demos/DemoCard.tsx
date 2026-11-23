@@ -11,10 +11,14 @@ import LaunchButton from "./LaunchButton";
 
 const ORDER = ["critical", "high", "medium", "low"];
 
-export default function DemoCard({ demo, last, onLaunch, launching, blocked }: { demo: Demo; last?: StoredRun; onLaunch: (id: string) => void; launching: boolean; blocked: string | null }) {
+export default function DemoCard({ demo, last, onLaunch, launching, blocked, unavailable }: { demo: Demo; last?: StoredRun; onLaunch: (id: string) => void; launching: boolean; blocked: string | null; unavailable?: string | null }) {
   const [open, setOpen] = useState(false);
-  const rules = [...new Set(demo.findings.map((f) => f.ruleId).filter(Boolean))];
-  const deps = demo.findings.filter((f) => f.type === "vulnerable_dependency");
+  const findings = demo.findings ?? [];
+  const bySeverity = demo.bySeverity ?? {};
+  const rules = [...new Set(findings.map((f) => f.ruleId).filter(Boolean))];
+  const deps = findings.filter((f) => f.type === "vulnerable_dependency");
+  const isPrivate = demo.private === true;
+  const note = unavailable ?? blocked;
   const state = last ? outcome(last.status, last.conclusion) : "ready";
 
   return (
@@ -22,32 +26,36 @@ export default function DemoCard({ demo, last, onLaunch, launching, blocked }: {
       <div className="flex items-start justify-between gap-2">
         <div>
           <h3 id={`d-${demo.id}`} className="text-lg font-semibold">{demo.name}</h3>
-          <p className="mt-0.5 text-xs text-green">{demo.categories.join(" · ")}</p>
+          <p className="mt-0.5 text-xs text-green">{isPrivate ? "Private repository · Results only" : (demo.categories ?? []).join(" · ")}</p>
         </div>
         <StatusIndicator outcome={state} />
       </div>
 
       <p className="text-sm text-mute">{demo.description}</p>
 
-      <div className="flex flex-wrap items-center gap-1.5" aria-label="Findings by severity">
-        <span className="text-sm font-medium">{demo.findings.length} {demo.findings.length === 1 ? "finding" : "findings"}</span>
-        {ORDER.filter((s) => demo.bySeverity[s]).map((s) => (
-          <VulnerabilityBadge key={s} severity={s}>{demo.bySeverity[s]} {s}</VulnerabilityBadge>
-        ))}
-      </div>
+      {isPrivate ? (
+        <p className="text-xs text-mute">Runs in its own GitHub Actions. The run link is private, so you will see the results on this site instead.</p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-1.5" aria-label="Findings by severity">
+          <span className="text-sm font-medium">{findings.length} {findings.length === 1 ? "finding" : "findings"}</span>
+          {ORDER.filter((s) => bySeverity[s]).map((s) => (
+            <VulnerabilityBadge key={s} severity={s}>{bySeverity[s]} {s}</VulnerabilityBadge>
+          ))}
+        </div>
+      )}
 
       {rules.length > 0 && (
         <p className="font-mono text-xs text-mute">{rules.join(" ")}{deps.length ? ` + ${deps.length} dependency` : ""}</p>
       )}
 
-      <div>
+      {!isPrivate && <div>
         <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-1 text-sm text-purple hover:text-ink">
           <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden />
           Scanner findings and why they matter
         </button>
         {open && (
           <ul className="mt-3 space-y-2 text-sm">
-            {demo.findings.map((f) => (
+            {findings.map((f) => (
               <li key={f.id} className="rounded-lg border border-line p-2.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <VulnerabilityBadge severity={f.severity} />
@@ -61,11 +69,11 @@ export default function DemoCard({ demo, last, onLaunch, launching, blocked }: {
             ))}
           </ul>
         )}
-      </div>
+      </div>}
 
       <div className="mt-auto space-y-2">
-        <LaunchButton onClick={() => onLaunch(demo.id)} loading={launching} disabled={blocked !== null} />
-        {blocked && <p className="text-xs text-warn">{blocked}</p>}
+        <LaunchButton onClick={() => onLaunch(demo.id)} loading={launching} disabled={note !== null && note !== undefined} />
+        {note && <p className="text-xs text-warn">{note}</p>}
         {last && <Link to={`/run/${last.launchId}`} className="block text-center text-xs text-green hover:underline">View last run</Link>}
       </div>
     </motion.article>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, getResults } from "../services/api";
-import type { Results as R, ScanUrlResults } from "../types/execution";
+import type { PrivateResults, Results as R, ScanUrlResults } from "../types/execution";
 import FindingsSummary from "../components/security/FindingsSummary";
 import VulnerabilityCard from "../components/security/VulnerabilityCard";
 import RemediationSummary from "../components/security/RemediationSummary";
@@ -9,13 +9,14 @@ import VerificationResults from "../components/security/VerificationResults";
 import ResultSummary from "../components/results/ResultSummary";
 import FixOutcomeCard from "../components/results/FixOutcomeCard";
 import ScanUrlResultCard from "../components/results/ScanUrlResultCard";
+import PrivateResultCard from "../components/results/PrivateResultCard";
 import ReportLinks from "../components/results/ReportLinks";
 import demos from "../data/demos.json";
 import type { Demo } from "../types/demo";
 
 export default function Results() {
   const { id = "" } = useParams();
-  const [res, setR] = useState<R | ScanUrlResults | null>(null);
+  const [res, setR] = useState<R | ScanUrlResults | PrivateResults | null>(null);
   const [err, setErr] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -41,6 +42,19 @@ export default function Results() {
           <p className="font-mono text-xs text-mute">Execution {id}</p>
         </div>
         <ScanUrlResultCard r={res} />
+      </div>
+    );
+  }
+  if ("kind" in res && res.kind === "private") {
+    const pname = (demos as Demo[]).find((d) => d.id === res.demoId)?.name ?? res.demoId;
+    return (
+      <div className="space-y-5">
+        <div>
+          <Link to={`/run/${id}`} className="text-sm text-green hover:underline">← Execution</Link>
+          <h1 className="mt-1 text-2xl font-semibold">{pname}: security results</h1>
+          <p className="font-mono text-xs text-mute">Execution {id}</p>
+        </div>
+        <PrivateResultCard r={res} />
       </div>
     );
   }

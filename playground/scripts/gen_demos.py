@@ -20,6 +20,14 @@ DEMOS = [
     ("crypt-keeper-mcp", "Crypt Keeper MCP", "demo/crypt-keeper-mcp/package.json"),
     ("seance-gateway", "Séance Gateway", "demo/seance-gateway/package.json"),
 ]
+# Private demos live in their own private repository and are NOT scanned here. Their entries carry only a name and a
+# neutral description (never findings, counts or rule ids), so a visitor or an agent cannot read answers from this repo.
+PRIVATE_DEMOS = [
+    {"id": "ledgerlight", "name": "Ledgerlight",
+     "description": "A small AI bookkeeping assistant that lives in its own private repository and runs SupplAIGuard through its own GitHub Actions. You cannot read its code; you only see the results.",
+     "private": True},
+]
+
 # Source: demo/haunted-storyteller/storyteller/agent.py docstring.
 HAUNTED = "Agent factory: a Strands agent wired to local tools + the Crypt Keeper MCP server."
 
@@ -71,9 +79,10 @@ def main() -> None:
         demos.append({"id": demo_id, "name": name, "description": desc,
                       "categories": [CATEGORY[t] for t in types], "bySeverity": sev,
                       "scannerVersion": raw.get("scanner_version", ""), "findings": findings})
+    demos.extend(PRIVATE_DEMOS)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(demos, indent=2, ensure_ascii=False) + "\n")
-    print(f"wrote {OUT.relative_to(ROOT)}: " + ", ".join(f"{d['id']}={len(d['findings'])}" for d in demos))
+    print(f"wrote {OUT.relative_to(ROOT)}: " + ", ".join(f"{d['id']}={len(d['findings'])}" for d in demos if "findings" in d))
 
 
 if __name__ == "__main__":

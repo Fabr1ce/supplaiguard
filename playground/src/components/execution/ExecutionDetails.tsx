@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Execution } from "../../types/execution";
 import { duration, time } from "../../services/format";
 
-export default function ExecutionDetails({ e }: { e: Execution }) {
+export default function ExecutionDetails({ e, privateRepo = false }: { e: Execution; privateRepo?: boolean }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (e.status === "completed") return;
@@ -10,7 +10,7 @@ export default function ExecutionDetails({ e }: { e: Execution }) {
     return () => clearInterval(t);
   }, [e.status]);
   const rows: [string, string][] = [
-    ["Repository", "Fabr1ce/supplaiguard"],
+    ["Repository", privateRepo ? "Private repository" : "Fabr1ce/supplaiguard"],
     ["Workflow", e.workflow],
     ["Branch", e.branch],
     ["Run ID", e.runId ? String(e.runId) : "Waiting for GitHub"],

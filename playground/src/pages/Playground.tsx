@@ -7,7 +7,7 @@ import type { Demo } from "../types/demo";
 import DemoGrid from "../components/demos/DemoGrid";
 import ScanUrlCard from "../components/demos/ScanUrlCard";
 import ProposeFixToggle from "../components/demos/ProposeFixToggle";
-import { ApiError, apiConfigured, canProposeFix, canScanUrl, getHealth, launchDemo, launchRepo } from "../services/api";
+import { ApiError, apiConfigured, canLaunchPrivate, canProposeFix, canScanUrl, getHealth, launchDemo, launchRepo } from "../services/api";
 import { activeRun, fromExecution, introSeen, loadRuns, markIntroSeen, saveRun } from "../services/storage";
 
 export default function Playground() {
@@ -16,6 +16,7 @@ export default function Playground() {
   const [error, setError] = useState<string | null>(null);
   const [fixAvailable, setFixAvailable] = useState(false);
   const [scanUrlAvailable, setScanUrlAvailable] = useState(false); // off until /api/health says otherwise
+  const [privateAvailable, setPrivateAvailable] = useState<boolean | null>(null); // null while /api/health loads
   const [proposeFix, setProposeFix] = useState(false); // off by default, never remembered
   const [intro, setIntro] = useState(!introSeen());
   const runs = useMemo(loadRuns, []);
@@ -27,12 +28,14 @@ export default function Playground() {
         .then((h) => {
           setFixAvailable(canProposeFix(h));
           setScanUrlAvailable(canScanUrl(h));
+          setPrivateAvailable(canLaunchPrivate(h));
         })
         .catch(() => {
           setFixAvailable(false);
           setScanUrlAvailable(false);
+          setPrivateAvailable(false);
         });
-    }
+    } else setPrivateAvailable(false);
   }, []);
 
   const onLaunch = async (demoId: string) => {
@@ -40,7 +43,7 @@ export default function Playground() {
     setError(null);
     setLaunching(demoId);
     try {
-      const r = await launchDemo(demoId, fixAvailable && proposeFix);
+      const r = await launchDemo(demoId, fixAvailable && proposeFix && (demos as Demo[]).find((d) => d.id === demoId)?.private !== true);
       const now = new Date().toISOString();
       saveRun({ launchId: r.launchId, demoId, createdAt: now, status: "queued", conclusion: null });
       nav(`/run/${r.launchId}`);
@@ -101,7 +104,7 @@ export default function Playground() {
       <section aria-labelledby="demos">
         <h2 id="demos" className="mb-4 text-xl font-semibold">Choose a demo</h2>
         {fixAvailable && <div className="mb-4"><ProposeFixToggle checked={proposeFix} onChange={setProposeFix} disabled={!!launching} /></div>}
-        <DemoGrid demos={demos as Demo[]} runs={runs} launchingId={launching} onLaunch={onLaunch} blocked={blocked} />
+        <DemoGrid demos={demos as Demo[]} runs={runs} launchingId={launching} onLaunch={onLaunch} blocked={blocked} privateAvailable={privateAvailable} />
       </section>
 
       {scanUrlAvailable && <ScanUrlCard onLaunch={onLaunchRepo} launching={launching === "scan-url"} blocked={launching && launching !== "scan-url" ? "Another launch is starting." : blocked} />}

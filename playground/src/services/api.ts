@@ -1,4 +1,4 @@
-import type { Execution, Results, ScanUrlResults } from "../types/execution";
+import type { Execution, PrivateResults, Results, ScanUrlResults } from "../types/execution";
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 
@@ -9,7 +9,12 @@ export interface Health {
   proposeFixEnabled?: boolean;
   /** Absent on an older Worker: treated as off. */
   scanUrlEnabled?: boolean;
+  /** Absent on an older Worker: treated as not connected. The Worker never says which repository. */
+  privateDemoAvailable?: boolean;
 }
+
+/** A private demo card is launchable only when the service says it is connected, and launching is on. */
+export const canLaunchPrivate = (h: Health | null | undefined) => h?.privateDemoAvailable === true && h.launchEnabled;
 
 /** The "Scan Your Own Repository" card is shown only when the service says scanning by URL is available. */
 export const canScanUrl = (h: Health | null | undefined) => h?.scanUrlEnabled === true && h.launchEnabled;
@@ -62,5 +67,5 @@ export const launchRepo = (repoUrl: string, ref?: string | null) =>
   });
 
 export const getStatus = (id: string) => request<Execution>(`/api/status/${encodeURIComponent(id)}`);
-export const getResults = (id: string) => request<Results | ScanUrlResults>(`/api/results/${encodeURIComponent(id)}`);
+export const getResults = (id: string) => request<Results | ScanUrlResults | PrivateResults>(`/api/results/${encodeURIComponent(id)}`);
 export const getHealth = () => request<Health>("/api/health");
