@@ -81,7 +81,7 @@ The Pages root is the homepage: it leads to the Playground (`/playground/`) and 
 
 The loop has five steps, and each one is a separate workflow file in the consumer repository, so a problem in one cannot break the others.
 
-1. **Scan and triage.** `examples/consumer-workflow.yml` (calls `scan.yml`). Run it manually with `agent-triage` to get the triage text.
+1. **Scan and triage.** `examples/consumer-workflow.yml` (calls `scan.yml`). Uncomment `agent-triage: true` and pass `KIRO_API_KEY` to get the triage text.
 2. **Remediate and verify.** `examples/consumer-remediate.yml` (calls `remediate.yml`). Run it manually. It opens a draft PR on `supplaiguard/fix-<run id>`. The PR body shows the scanner re-check: complete or not, fixed rule ids, what is still open.
 3. **Review.** A person reads the draft, approves and merges it. Nothing merges automatically.
 4. **Learn.** `examples/consumer-report-fix.yml` (calls `report-fix.yml`) runs when that PR closes as merged. It needs the `SG_EVOLUTION_OPT_IN` variable and the `SG_APP_ID` and `SG_APP_PRIVATE_KEY` secrets, and it opens a sanitized report pull request on this repository.
