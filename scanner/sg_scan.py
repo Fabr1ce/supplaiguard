@@ -25,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import tomllib
 import urllib.request
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -394,9 +395,39 @@ def requirements_packages(p: Path) -> dict[str, str]:
     return out
 
 
+PY_LOCKFILES = ("uv.lock", "poetry.lock")
+
+
+def python_lock_packages(scan: Scan, p: Path) -> set[tuple[str, str]]:
+    """Every registry (name, version) in a uv.lock or poetry.lock. Both files are TOML with `[[package]]` tables.
+
+    uv marks the project itself and local or git packages with a non-registry `source`; those are not on PyPI,
+    so they are skipped rather than sent to OSV as if they were.
+    """
+    try:
+        data = tomllib.loads(read_capped(p, errors="ignore"))
+    except tomllib.TOMLDecodeError as e:
+        scan.error(rel(scan, p), "discovery", f"lockfile is not valid TOML ({e}); not analysed")
+        return set()
+    out: set[tuple[str, str]] = set()
+    for pkg in data.get("package") or []:
+        if not isinstance(pkg, dict):
+            continue
+        name, ver, source = pkg.get("name"), pkg.get("version"), pkg.get("source")
+        if not (isinstance(name, str) and isinstance(ver, str)):
+            continue
+        if isinstance(source, dict) and "registry" not in source:
+            continue  # uv: virtual, editable, directory, git or path source
+        out.add((name.lower().replace("_", "-"), ver))
+    return out
+
+
 def scan_deps(scan: Scan, lock: Path, offline: bool):
-    eco = "PyPI" if lock.suffix == ".txt" else "npm"
-    pkgs = set(requirements_packages(lock).items()) if eco == "PyPI" else lock_packages(scan, lock)
+    eco = "PyPI" if lock.suffix == ".txt" or lock.name in PY_LOCKFILES else "npm"
+    if lock.name in PY_LOCKFILES:
+        pkgs = python_lock_packages(scan, lock)
+    else:
+        pkgs = set(requirements_packages(lock).items()) if eco == "PyPI" else lock_packages(scan, lock)
     if not pkgs or offline:
         if offline and pkgs:
             scan.error("osv.dev", "threat_analysis", "offline mode: dependency CVEs NOT checked")
@@ -480,6 +511,10 @@ def run_scan(repo: Path, offline: bool = False, environment: str | None = None,
         guarded("threat_analysis", repo, scan_injection, scan, str(component), str(source), text)
     for p in files:
         if p.name == "package-lock.json":
+            cov["lockfiles"] += 1
+            guarded("threat_analysis", p, scan_deps, scan, p, offline)
+    for p in files:
+        if p.name in PY_LOCKFILES:
             cov["lockfiles"] += 1
             guarded("threat_analysis", p, scan_deps, scan, p, offline)
     for p in files:
@@ -678,7 +713,7 @@ def _counts(out: dict) -> dict:
 
 
 NOTHING_RECOGNISED = ("No findings, but nothing recognised was found to scan (looked for mcp.json, "
-                      ".kiro/agents/*.json, SKILL.md, package-lock.json, requirements*.txt). "
+                      ".kiro/agents/*.json, SKILL.md, package-lock.json, uv.lock, poetry.lock, requirements*.txt). "
                       "This is not a statement that the repository is safe.")
 
 
