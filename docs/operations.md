@@ -84,6 +84,10 @@ Set `PROPOSE_FIX_ENABLED` to `"false"` in the dashboard or `wrangler.toml` (then
 
 Set `SCAN_URL_ENABLED` to `"false"` in the dashboard or `wrangler.toml` (then redeploy). The card disappears and a repository request gets a 403. To stop it at the source, disable `scan-repo.yml` in Settings > Actions. The workflow itself ran live once by manual dispatch (run 45071479996), but the Playground-triggered path (Worker dispatch, run lookup, artifact download) has not, so the first enabled launch is its first real test: watch the run. See [`playground/README.md`](../playground/README.md).
 
+### Connect Or Disconnect The Private Demo
+
+The fourth Playground card runs in a separate private repository and its own Actions. Set `PRIVATE_DEMO_REPO` (`owner/name`) in the dashboard or `wrangler.toml` and redeploy to connect it; set it to `""` to disconnect. Before that, the private repository needs the secret `KIRO_API_KEY`, real commit SHAs in place of the `<FULL_COMMIT_SHA>` placeholders, Actions enabled, and the Worker's GitHub App installed on it (Actions: Read and write, Metadata: Read-only). Not run live: the first launch is its first real test. See "Private Demo" in [`playground/README.md`](../playground/README.md).
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |
