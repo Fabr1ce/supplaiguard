@@ -35,6 +35,7 @@ This page separates what is tested, what is implemented but never run live, and 
 | `propose-fix` job opening a draft pull request | The README and the workflow header say it was never run on GitHub. Needs `KIRO_API_KEY` and the Actions setting for pull requests. |
 | Playground `proposeFix` toggle and result view | Depends on the job above. The README says "Not yet run end to end against GitHub". |
 | Playground Worker deployed and launching real runs | The repository has the code, tests and deploy notes. It records no live launch. |
+| Playground scan by URL (`SCAN_URL_ENABLED`) | Off by default. Fixtures and unit tests only: the GitHub dispatch of `scan-repo.yml`, the run lookup by `launch_id` and the artifact download are unverified offline. |
 | `scan-repo.yml` against a real public repository | Task 9.2 of scan-github-repo is open: it needs github.com and was not possible offline. A local fixture test covers the logic. |
 | `report-fix.yml` and `examples/consumer-report-fix.yml` | Task 25.2: written, not run against a real merged fix pull request. Its last commit removed an invalid `split()` expression. |
 | Full interactive coordinator run | Tasks 13.3, 13.4, 13.7, 19.2 and 33.5 are open: write prompts, verification honesty, the `Stop` hook review and the branch and pull request flow were never observed live. |

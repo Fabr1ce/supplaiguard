@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Build the static results site that GitHub Pages serves, from downloaded demo-triage artifacts.
 
-Usage: build_site.py INPUT_DIR OUTPUT_DIR RUN_URL DATE
+Usage: build_site.py INPUT_DIR OUTPUT_DIR RUN_URL DATE   (optional environment variable DEMO_NAME)
 
 INPUT_DIR holds one directory per demo named `demo-triage-<demo>` (the artifact layout of demo-triage.yml):
-  findings.json, report/report.html, report/summary.md, triage.txt, triage.exit, mcp-disabled.txt
+  findings.json, report/report.html, report/summary.md, triage.txt, triage.exit, mcp-disabled.txt, demo-name.txt
+actions/download-artifact extracts a pattern match of exactly ONE artifact straight into `path` (v8.0.2:
+`artifacts.length === 1` skips the per-artifact subdirectory). That flat layout is handled too: the files are
+read from INPUT_DIR itself and the demo name comes from demo-name.txt, else from DEMO_NAME. Both are checked with
+NAME_OK; without either the demo is called `demo`.
 Standard library only. Everything that came from a scanned repository or from the agent is untrusted: it is
 HTML-escaped or reduced to allow-listed values, demo names are allow-listed, and the run URL must be an https
 github.com URL. A missing or failed step is stated on the page, never hidden.
@@ -13,6 +17,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
 import shutil
 import sys
@@ -69,7 +74,17 @@ FLOW = (
     ("Agent Triage", "A headless Kiro threat-analysis agent, with read-only tools, reads the findings and the code. It "
                      "links findings into attack paths and checks whether vulnerable code is actually used."),
     ("Publish", "These pages are built from the results of this run. A step that did not run is shown as skipped."),
+    ("Remediate", "Optional, off by default (the propose-fix input). A separate job lets the Remediation agent edit a "
+                  "copy of the demo. A deterministic fix gate allows only manifests and agent or MCP config, never "
+                  "source, secrets or workflows. The result is a DRAFT pull request. A person reviews it, and "
+                  "nothing merges automatically."),
+    ("Verify", "The scanner runs again on the changed copy, and the draft pull request lists the before and after "
+               "result. A finding counts as resolved only when a re-scan no longer reports it. The tests are not run."),
+    ("Learn", "Opt-in. After a person merges a fix, a sanitized report (rule ids, severities, counts and outcome, no "
+              "source or paths) can be sent upstream so the rules improve."),
 )
+OPTIONAL_NOTE = ("Remediate, Verify and Learn are not tracked on this page. They happen in a separate Propose Fix job "
+                 "and in your own repository, so open the workflow run to see whether Remediate ran.")
 
 
 def title_case(slug: str) -> str:
@@ -138,7 +153,25 @@ def _counts(d: Path) -> str:
     return line
 
 
-def build(src: Path, out: Path, run_url: str, when: str, banner: Path | None = None, mark: Path | None = None) -> None:
+def _demo_dirs(src: Path, demo_name: str | None) -> list[tuple[str, Path]]:
+    """(name, directory) for every demo found, in either download-artifact layout. Names are not yet validated."""
+    found = [(d.name.removeprefix("demo-triage-"), d) for d in sorted(src.glob("demo-triage-*")) if d.is_dir()]
+    if found or not src.is_dir():
+        return found
+    flat_markers = ("findings.json", "triage.txt", "triage.exit", "mcp-disabled.txt")
+    if not any((src / m).is_file() for m in flat_markers) and not (src / "report" / "report.html").is_file():
+        return []
+    name = None
+    f = src / "demo-name.txt"
+    if f.is_file():
+        name = f.read_text(errors="replace").strip()[:80]
+    if not name or not NAME_OK.match(name):
+        name = demo_name if demo_name and NAME_OK.match(demo_name) else "demo"
+    return [(name, src)]
+
+
+def build(src: Path, out: Path, run_url: str, when: str, banner: Path | None = None, mark: Path | None = None,
+          demo_name: str | None = None) -> None:
     m = URL_OK.match(run_url)
     if not m:
         raise ValueError("run_url must be an https://github.com/<owner>/<repo>/actions/runs/<id> URL")
@@ -152,8 +185,7 @@ def build(src: Path, out: Path, run_url: str, when: str, banner: Path | None = N
         shutil.copyfile(mark, out / "mark.svg")
 
     rows, cards = [], []
-    for d in sorted(p for p in src.glob("demo-triage-*") if p.is_dir()):
-        name = d.name.removeprefix("demo-triage-")
+    for name, d in _demo_dirs(src, demo_name):
         if not NAME_OK.match(name) or name in {".", ".."}:
             continue
         shown = html.escape(title_case(name))
@@ -186,18 +218,26 @@ def build(src: Path, out: Path, run_url: str, when: str, banner: Path | None = N
         cards.append(f'<div class="panel demo"><h3>{shown}</h3><p>{html.escape(_counts(d))}</p>'
                      f"<p>{' | '.join(links) or 'No reports were produced.'}</p></div>")
 
+    links_row = (' | '.join((
+        '<a href="playground/">Open The Playground</a>',
+        '<a href="https://github.com/Fabr1ce/supplaiguard/tree/main/docs">Documentation</a>',
+        f'<a href="{html.escape(repo_url, quote=True)}">Repository</a>')))
+    empty = ("No demo results were found in this run. The run may have skipped the scan, or its results artifact was "
+             f'missing. <a href="{html.escape(run_url, quote=True)}">Open the workflow run</a> to see which step failed.')
     flow_items = "".join(f"<li><strong>{n}</strong><br><span class=\"dim\">{html.escape(t)}</span></li>" for n, t in FLOW)
     body = (
         (_header("banner.gif", TITLE) if has_banner else f"<header><h1>{html.escape(TITLE)}</h1></header>")
         + '<div class="panel"><a class="btn" href="' + html.escape(repo_url, quote=True) + '/actions/workflows/demo-triage.yml">Run The Demo Workflow</a>'
         '<p class="note">Starting a run needs write access to the repository, so the button opens the workflow page '
         "on GitHub. Everyone else can read the latest results below, or fork the repository and run it there.</p></div>"
+        '<p class="note">This page shows the latest run only. Each run replaces the whole page with its own results.</p>'
+        f'<p>{links_row}</p>'
         "<h2>How The Flow Works</h2>"
-        f'<div class="panel"><ol class="flow">{flow_items}</ol></div>'
+        f'<div class="panel"><ol class="flow">{flow_items}</ol><p class="note">{html.escape(OPTIONAL_NOTE)}</p></div>'
         "<h2>What Happened In This Run</h2>"
         '<div class="panel"><table><tr><th>Demo</th><th>Copy The Demo</th><th>Deterministic Scan</th><th>Agent Triage</th></tr>'
-        f"{''.join(rows) or '<tr><td colspan=4>No demo results were found.</td></tr>'}</table></div>"
-        "<h2>Results</h2>" + ("".join(cards) or '<div class="panel">No demo results were found.</div>')
+        f"{''.join(rows) or '<tr><td colspan=4 class=bad>' + empty + '</td></tr>'}</table></div>"
+        "<h2>Results</h2>" + ("".join(cards) or '<div class="panel bad">' + empty + "</div>")
         + f'<footer>Generated {html.escape(when)} by <a href="{html.escape(run_url, quote=True)}">this workflow run</a>. '
         "No login is needed to read this page.</footer>"
     )
@@ -210,7 +250,7 @@ def main(argv: list[str]) -> int:
         print(__doc__, file=sys.stderr)
         return 2
     try:
-        build(Path(argv[1]), Path(argv[2]), argv[3], argv[4])
+        build(Path(argv[1]), Path(argv[2]), argv[3], argv[4], demo_name=os.environ.get("DEMO_NAME"))
     except (OSError, ValueError) as e:
         print(f"build_site: {e}", file=sys.stderr)
         return 2

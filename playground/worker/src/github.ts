@@ -77,6 +77,23 @@ export async function dispatch(env: Env, demo: string, launchId: string, propose
   if (res.status !== 204) throw new GitHubError(`dispatch ${res.status}`);
 }
 
+/** Name of the workflow file used for scan-by-URL runs. */
+export const scanWorkflowFile = (env: Env) => env.SCAN_URL_WORKFLOW_FILE || "scan-repo.yml";
+
+/**
+ * Dispatches scan-repo.yml. `repo` and `ref` MUST be the normalized values from parseRepoRef: nothing the visitor
+ * typed is passed on. The workflow input `ref` is an empty string when no branch or tag was asked for.
+ */
+export async function dispatchScanUrl(env: Env, repo: string, ref: string | null, launchId: string): Promise<void> {
+  const token = await installationToken(env);
+  const res = await gh(`${repoPath(env)}/actions/workflows/${scanWorkflowFile(env)}/dispatches`, {
+    token,
+    method: "POST",
+    body: JSON.stringify({ ref: env.WORKFLOW_REF, inputs: { repo, ref: ref ?? "", launch_id: launchId } }),
+  });
+  if (res.status !== 204) throw new GitHubError(`dispatch ${res.status}`);
+}
+
 export interface RunInfo {
   id: number;
   name: string;
@@ -99,11 +116,11 @@ export async function getRun(env: Env, runId: number): Promise<RunInfo | null> {
 }
 
 /** The dispatch response has no run id, so find the run whose name carries our launch id. */
-export async function findRun(env: Env, launchId: string, since: number): Promise<RunInfo | null> {
+export async function findRun(env: Env, launchId: string, since: number, workflowFile: string = env.WORKFLOW_FILE): Promise<RunInfo | null> {
   const token = await installationToken(env);
   const created = new Date(since - 60_000).toISOString().slice(0, 19) + "Z";
   const res = await gh(
-    `${repoPath(env)}/actions/workflows/${env.WORKFLOW_FILE}/runs?event=workflow_dispatch&per_page=30&created=%3E%3D${encodeURIComponent(created)}`,
+    `${repoPath(env)}/actions/workflows/${workflowFile}/runs?event=workflow_dispatch&per_page=30&created=%3E%3D${encodeURIComponent(created)}`,
     { token },
   );
   if (!res.ok) throw new GitHubError(`list ${res.status}`);

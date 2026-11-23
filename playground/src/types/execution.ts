@@ -17,6 +17,8 @@ export interface Execution {
   runId: number | null;
   branch: string;
   workflow: string;
+  /** Present for a scan by URL: the normalized repository and ref the Worker dispatched. */
+  scanUrl?: { repo: string; ref: string | null };
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
@@ -67,4 +69,26 @@ export interface StoredRun {
   createdAt: string;
   status: RunStatus;
   conclusion: string | null;
+}
+
+/** Result of a scan by URL. Numbers, enums and one validated repository string: no text from the scanned repository. */
+export interface ScanUrlResults {
+  kind: "scan-url";
+  launchId: string;
+  demoId: "scan-url";
+  runUrl: string;
+  scanUrl: { repo: string; ref: string | null };
+  repository: string | null;
+  scanId: string;
+  scannerVersion: string;
+  /** 0 clean, 1 findings, 2 scan errors or incomplete. */
+  exitCode: 0 | 1 | 2;
+  status: "clean" | "findings" | "incomplete";
+  complete: boolean;
+  findingsCount: number;
+  bySeverity: { critical: number; high: number; medium: number; low: number };
+  suspiciousContent: number;
+  incompleteReasons: string[];
+  nothingRecognised: boolean;
+  errorCount: number;
 }

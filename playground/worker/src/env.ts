@@ -18,4 +18,10 @@ export interface Env {
   PROPOSE_FIX_ENABLED?: string;
   PROPOSE_FIX_DAILY_CAP?: string;
   PROPOSE_FIX_PER_CLIENT_PER_DAY?: string;
+  /** Off unless exactly "true". The only switch that lets a visitor scan a repository by URL. */
+  SCAN_URL_ENABLED?: string;
+  SCAN_URL_DAILY_CAP?: string;
+  SCAN_URL_PER_CLIENT_PER_DAY?: string;
+  /** Workflow file for URL scans. Defaults to scan-repo.yml. */
+  SCAN_URL_WORKFLOW_FILE?: string;
 }

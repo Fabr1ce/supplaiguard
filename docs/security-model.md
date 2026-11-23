@@ -64,6 +64,10 @@ This summarizes the mapping in the [scan-github-repo design](../.kiro/specs/scan
 
 All workflows start with `permissions: {}`, and each job asks for only what it needs.
 
+## Scan By URL From The Playground
+
+Off unless the Worker variable `SCAN_URL_ENABLED` is exactly `"true"`. The visitor's text is untrusted. It is validated in the browser (convenience), in the Worker before any reservation or network call, in `scan-repo.yml` by a regex, and by `scanner/sg_guard.py`. Only the normalized `owner/repo` and ref reach the workflow, through `env:` and never through `${{ }}` in a script. The run name carries only the launch id. The clone is shallow with hooks and submodules off, and nothing in it is executed. The Worker passes on counts, enums, fixed reason codes and one validated repository string, never text from the repository. Failure modes fail closed: any error, limit or missing report is "incomplete", not clean. Limits: 1 per client per day, 5 per day, one run at a time. Residual risks: abuse of runner minutes, public content fetched on a visitor's choice, and package names sent to OSV.dev. This path has not run live on GitHub; fixtures and unit tests only.
+
 ## What Is Never Done
 
 - Nothing merges automatically. No workflow or agent merges, and agents deny `git merge`, `gh pr merge` and force pushes.

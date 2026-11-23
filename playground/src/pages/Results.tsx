@@ -1,20 +1,21 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ApiError, getResults } from "../services/api";
-import type { Results as R } from "../types/execution";
+import type { Results as R, ScanUrlResults } from "../types/execution";
 import FindingsSummary from "../components/security/FindingsSummary";
 import VulnerabilityCard from "../components/security/VulnerabilityCard";
 import RemediationSummary from "../components/security/RemediationSummary";
 import VerificationResults from "../components/security/VerificationResults";
 import ResultSummary from "../components/results/ResultSummary";
 import FixOutcomeCard from "../components/results/FixOutcomeCard";
+import ScanUrlResultCard from "../components/results/ScanUrlResultCard";
 import ReportLinks from "../components/results/ReportLinks";
 import demos from "../data/demos.json";
 import type { Demo } from "../types/demo";
 
 export default function Results() {
   const { id = "" } = useParams();
-  const [r, setR] = useState<R | null>(null);
+  const [res, setR] = useState<R | ScanUrlResults | null>(null);
   const [err, setErr] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -30,7 +31,20 @@ export default function Results() {
       </div>
     );
   }
-  if (!r) return <p className="mt-10 text-center text-mute">Loading results…</p>;
+  if (!res) return <p className="mt-10 text-center text-mute">Loading results…</p>;
+  if ("kind" in res && res.kind === "scan-url") {
+    return (
+      <div className="space-y-5">
+        <div>
+          <Link to={`/run/${id}`} className="text-sm text-green hover:underline">← Execution</Link>
+          <h1 className="mt-1 text-2xl font-semibold">Repository scan: results</h1>
+          <p className="font-mono text-xs text-mute">Execution {id}</p>
+        </div>
+        <ScanUrlResultCard r={res} />
+      </div>
+    );
+  }
+  const r = res as R;
   const name = (demos as Demo[]).find((d) => d.id === r.demoId)?.name ?? r.demoId;
 
   return (

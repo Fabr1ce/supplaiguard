@@ -48,6 +48,75 @@ or anything else is off. Nothing in a browser request can turn it on.
 and any `proposeFix` request is ignored. To also stop it at the source, leave the `propose-fix` workflow input alone (default false) or remove the
 `KIRO_API_KEY` secret (the job then fails before doing anything).
 
+## Scan By URL Flag (`SCAN_URL_ENABLED`, off by default)
+
+Lets a visitor name a **public GitHub repository** and have SupplAIGuard scan it. It is the Playground version of the CLI
+`sg_scan.py --github OWNER/REPO` and of the manual workflow `scan-repo.yml`. It uses the deterministic scanner only: no agent, no
+model, no secrets. Nothing from the scanned repository is executed, installed or built.
+
+**Status.** This path has **not run live on GitHub**. It is covered by fixtures and unit tests only (the validator against the Python
+reference, the Worker with a mocked GitHub, the results shaping, the UI services). The real GitHub dispatch, the run lookup by `run-name`
+and the artifact download for `scan-repo.yml` are unverified offline. The scanner's own URL scan has likewise never been run against a real
+repository from this environment (see `docs/status.md`).
+
+**Where it is set.** Only in the Worker: `SCAN_URL_ENABLED` in `worker/wrangler.toml` (both `[vars]` and `[env.dev.vars]`, default `"false"`), or in
+the Cloudflare dashboard under Settings > Variables, no deploy needed. Only the exact string `"true"` turns it on. Unset, `"false"`, `"TRUE"`, `"1"`
+or anything else is off. Nothing in a browser request can turn it on.
+
+**How it flows.**
+1. `/api/health` reports `scanUrlEnabled`. The page shows the "Scan Your Own Repository" card only when that is true (and launching is on).
+   With the flag off no input is rendered at all.
+2. The card checks the two fields in the browser with a copy of the Worker's validator (`src/services/repoRef.ts`, kept byte-identical by a test)
+   and shows inline errors. This is a convenience only. The Worker is the authority.
+3. The page sends `POST /api/launch` with `{ "repoUrl": "...", "ref": "..." }` (`ref` optional). A request is **either** that form **or** the demo
+   form `{ "demoId": ... }`. Both together, neither, unknown fields and wrong types get a 400. With the flag off, a repository request is rejected with
+   a **403** `scan_url_disabled`. It is not silently turned into a demo, because there is no safe fallback.
+4. The Worker validates the reference (`worker/src/repoRef.ts`) before any reservation or network call and keeps only the normalized `owner/repo` and
+   the validated ref. It reserves a slot in the Durable Object (same limits as every launch, plus the URL limits below).
+5. The Worker dispatches `scan-repo.yml` on `WORKFLOW_REF` with the inputs `repo`, `ref` (empty string when none) and `launch_id`. Only the
+   normalized values are sent. The workflow validates again with its own regex, then the scanner's guard (`scanner/sg_guard.py`) validates a third time.
+6. `scan-repo.yml` has the run name `Scan repo <launch_id>`. The Worker finds the run by that id, as it does for the demos, and the Execution page shows the
+   real job and step names (the single job `scan`, with the `Scan` step that clones and scans).
+7. `/api/results/:id` downloads the `supplaiguard-report` artifact and returns only: the normalized repository (`github.com/owner/repo@sha7`),
+   counts by severity, a count of findings that read like instructions to an agent, the exit code and status, fixed reason codes, and the run link.
+   No finding text, error message or file name from the repository is passed on or shown.
+
+**What the result can say.** The exit code keeps the scanner's meaning: 0 clean, 1 findings, 2 scan errors or incomplete. A failed fetch, a limit
+(truncated file list, oversized files, skipped links), any scanner error, a missing or unreadable report, or a recorded exit code of 2 all give status
+`incomplete`, shown as "NOT a clean result". The worker fails closed: anything missing is incomplete, never clean. A clean scan that recognised nothing
+(no MCP config, agent file, skill, lockfile or requirements file) says so.
+
+**Limits, tighter than normal launches.** A URL scan also counts against the normal limits (one active run at a time, 3 per client per hour, 30 per day)
+and additionally: `SCAN_URL_PER_CLIENT_PER_DAY` (default 1) and `SCAN_URL_DAILY_CAP` (default 5 per UTC day). A launch whose dispatch fails is refunded.
+Input limits: reference up to 300 characters, branch or tag up to 200, request body up to 1 KB.
+
+**Validation rules.** A TypeScript port of `scanner/github_fetch.py` `parse_github_ref` and the user-string checks in `scanner/sg_guard.py`.
+Only `https://github.com/<owner>/<repo>[.git][/tree/<ref>]` or `owner/repo` is accepted. The owner is 1 to 39 characters of letters, digits and hyphens, and does not
+start with a hyphen. The repo is 1 to 100 characters of letters, digits, `.`, `_` and `-`. The ref is 1 to 200 characters of letters, digits, `.`, `_`, `/` and `-`, with no leading
+`-` or `/`, no trailing `/` or `.lock`, no `..` and no `//`. Rejected: other hosts and schemes, credentials, ports, queries, non-ASCII or IDN text, control,
+bidi, zero-width and tag characters, percent-encoding, backslashes, newlines and other whitespace inside the value, and repo or ref text that reads like an
+instruction to an agent or contains a long non-hex encoded blob. Both validators run against the same inputs: `scanner/tests/fixtures/injection_corpus.json`
+and `scanner/tests/fixtures/github_ref_cases.json` (expectations generated from the Python code and checked by `scanner/tests/test_github_ref_cases.py`
+and `worker/test/repoRef.test.ts`). Known differences: error messages differ (the Worker uses fixed text that never echoes the input), and the Worker counts length in
+code points, like Python, but a `ref` of `""` is rejected like the CLI does. The Python guard is the reference. Change both together.
+
+**Cost and abuse risks.**
+* Each scan uses about one GitHub Actions run (a few minutes on a hosted runner). Anyone who can reach the page can trigger one, so keep the caps low.
+* Visitors choose the repository, so the run can fetch arbitrary public content from github.com. The clone is shallow and size-limited, hooks are off, submodules are off,
+  and nothing in it is run. Dependency lookups send package names and versions to OSV.dev (see `docs/security-model.md`).
+* The run log and artifacts of this project's repository name the scanned repository. The scanned repository's text can appear in the job summary and the HTML report,
+  where the scanner escapes it. The Playground shows none of it.
+* Artifacts expire after 14 days, and downloading one needs a GitHub login, so the page links to the run instead of embedding the report.
+* The 429 and 403 replies come from the Worker, never from GitHub's text.
+
+**GitHub App permissions.** No new permission. The Worker's App keeps `Actions: Read and write` and `Metadata: Read-only` on this repository only. That covers
+dispatching `scan-repo.yml` (a second workflow file in the same repository), listing its runs and reading its artifacts. `scan-repo.yml` itself has
+`permissions: {}` at the top and `contents: read` on its one job, and uses no secrets. The workflow file name is the Worker variable
+`SCAN_URL_WORKFLOW_FILE` (default `scan-repo.yml`). The workflow must exist on `WORKFLOW_REF` (default `main`) with the `launch_id` input.
+
+**Turn it off.** Set `SCAN_URL_ENABLED` to `"false"` (dashboard, or `wrangler.toml` and redeploy). The card disappears and any repository request gets a 403.
+To stop it at the source, disable the `scan-repo.yml` workflow in the repository's Actions settings.
+
 ## Laboratory Atmosphere
 
 While a run is queued or in progress, the Execution page gets a laboratory mood: a purple and green glow, occasional forked bolts behind the page, a slow arc between two electrodes, and a pulse on the running step. The storm grows as the run moves through its real steps. A successful run ends with a green "alive" glow. A failed or cancelled run fades to a dim, cold state with no celebration.

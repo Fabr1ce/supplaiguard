@@ -259,6 +259,9 @@ jobs:
   does not start other workflows, close and reopen the draft to run the scan checks on it.
   The Playground can request this job through the Worker setting `PROPOSE_FIX_ENABLED` (off unless exactly `"true"`); see
   `playground/README.md` for the flow, the limits, the cost and how to turn it off.
+  The Playground can also scan a public GitHub repository by URL through the Worker setting `SCAN_URL_ENABLED` (off unless exactly
+  `"true"`; scanner only, no agent). It dispatches `scan-repo.yml` with validated inputs. That path has not run live on GitHub: it is covered by
+  fixtures and unit tests only. See "Scan By URL Flag" in `playground/README.md`.
   The same run publishes the results to **GitHub Pages**, so nobody needs a GitHub login or Actions access to read
   them: a page per demo with the scanner's HTML report and the agent's triage text (escaped, shown as plain text; a
   skipped or failed triage is stated on the page). The run page also shows the findings table in its job summary.

@@ -74,6 +74,26 @@ describe("real state mapping", () => {
     expect(stepKeyFor("Deploy Results")).toBe("publish");
     expect(stepKeyFor("other")).toBe("unknown");
   });
+  it("maps scan-repo.yml (scan by URL) job and step names", () => {
+    expect(stepKeyFor("scan")).toBe("prepare");
+    expect(stepKeyFor("scan", "Validate inputs")).toBe("prepare");
+    expect(stepKeyFor("scan", "Check out SupplAIGuard")).toBe("prepare");
+    expect(stepKeyFor("scan", "Set up Python")).toBe("prepare");
+    expect(stepKeyFor("scan", "Scan")).toBe("fetchscan");
+    expect(stepKeyFor("scan", "Publish job summary")).toBe("publish");
+    expect(stepKeyFor("scan", "Upload report")).toBe("publish");
+    expect(stepKeyFor("scan", "Gate")).toBe("publish");
+    expect(stepKeyFor("scan", "Something else")).toBe("prepare");
+    expect(currentFlavor("in_progress", null, [job("scan", "in_progress", null, [["Scan", "in_progress", null]])])).toEqual({ key: "fetchscan", status: "running" });
+    expect(statusLine("fetchscan", "running")).toBe("Fetch and scan the repository: running");
+  });
+  it("scan-by-URL flavour never claims progress that did not happen", () => {
+    // Only a step that really finished with success is listed as done, and its line says only that the scanner ran.
+    expect(doneKeys([job("scan", "in_progress", null, [["Validate inputs", "completed", "success"], ["Scan", "in_progress", null]])])).toEqual(["prepare"]);
+    expect(doneKeys([job("scan", "in_progress", null, [["Scan", "completed", "failure"]])])).toEqual([]);
+    for (const m of RUNNING.fetchscan) expect(m).not.toMatch(BANNED);
+    expect(STEP_DONE.fetchscan).not.toMatch(/clean|safe|no findings|secure/i);
+  });
   it("derives the current state from the run", () => {
     expect(currentFlavor("queued", null, [])).toEqual({ key: "queued", status: "running" });
     expect(currentFlavor("in_progress", null, [job("triage", "in_progress", null, [["Deterministic scan x", "in_progress", null]])])).toEqual({ key: "scan", status: "running" });

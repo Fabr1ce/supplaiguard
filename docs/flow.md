@@ -57,7 +57,7 @@ Three workflows run the same scanner with no secrets.
 |---|---|---|---|
 | `self-scan.yml` | push to `main`, any pull request from this repository, manual | `contents: read` | Calls `scan.yml` on `.kiro` with `fail-on: low`. Suppressions come from the `.supplaiguard/suppressions.json` on the PR base commit. |
 | `scan.yml` (from a consumer) | `workflow_call` | `contents: read` | Validates inputs, downloads the pinned scanner by full commit SHA, scans, writes the job summary, uploads the `supplaiguard-report` artifact (14 days) and gates on the exit code. |
-| `scan-repo.yml` | manual (`repo`, `ref`) | `contents: read` | Clones a public GitHub repository through the hardened fetcher, scans it, publishes a summary and the same artifact. Findings only warn. A scan error fails the job. |
+| `scan-repo.yml` | manual (`repo`, `ref`) or the Playground Worker (adds `launch_id`, run name `Scan repo <launch_id>`) | `contents: read` | Clones a public GitHub repository through the hardened fetcher, scans it, publishes a summary and the same artifact. Findings only warn. A scan error fails the job. |
 
 **Gate (`scan.yml`).** Exit 0 passes. Exit 1 fails the check. Exit 2, or a missing `summary.md`, fails the check as "not clean".
 
@@ -90,6 +90,8 @@ Without `KIRO_API_KEY` the deterministic scan still runs, the agent step is skip
 3. It asks GitHub for a short-lived installation token for the GitHub App (permissions `actions: write` and metadata read, this repository only) and dispatches `demo-triage.yml` on `main` with `demo` and a `launch_id`. The `propose-fix` input is sent only if the visitor asked and `PROPOSE_FIX_ENABLED` is exactly `"true"`.
 4. The page polls `GET /api/status/:id`. The Worker lists recent runs and matches the `launch_id` in the `run-name`.
 5. When the run completes, `GET /api/results/:id` returns an allow-listed, size-limited view of the artifact. Agent text is untrusted and shown as plain text.
+
+**Scan by URL (flag `SCAN_URL_ENABLED`, off by default).** When on, the card sends `{ "repoUrl": "...", "ref": "..." }` instead of a demo. The Worker validates the reference in TypeScript (a port of `parse_github_ref` and the guard), keeps only the normalized `owner/repo` and ref, applies tighter limits (1 per client per day, 5 per day) and dispatches `scan-repo.yml` with `repo`, `ref` and `launch_id`. With the flag off the request gets a 403. The results page shows the repository, counts by severity, the exit code meaning and a link to the run, and never shows text from the scanned repository. A failed fetch, a limit or a missing report is shown as incomplete, never clean. This path has not run live on GitHub: only fixtures and unit tests cover it, and the dispatch and artifact download are unverified offline. See [`playground/README.md`](../playground/README.md).
 
 **Outputs.** The same artifacts as [Demo Triage](#3-demo-triage). The Playground never claims a finished triage is a remediation.
 

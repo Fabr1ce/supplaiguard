@@ -1,0 +1,351 @@
+{
+ "_note": "Expectations generated from scanner/github_fetch.py parse_github_ref. Verified by scanner/tests/test_github_ref_cases.py (Python) and playground/worker/test/repoRef.test.ts (TypeScript). Regenerate only when the Python rules change.",
+ "cases": [
+  {
+   "input": "owner/repo",
+   "ref": null,
+   "accepted": true,
+   "owner": "owner",
+   "repo": "repo",
+   "resolvedRef": null
+  },
+  {
+   "input": "o/r",
+   "ref": null,
+   "accepted": true,
+   "owner": "o",
+   "repo": "r",
+   "resolvedRef": null
+  },
+  {
+   "input": "octo-cat/hello.world",
+   "ref": null,
+   "accepted": true,
+   "owner": "octo-cat",
+   "repo": "hello.world",
+   "resolvedRef": null
+  },
+  {
+   "input": "octocat/Hello_World.git",
+   "ref": null,
+   "accepted": true,
+   "owner": "octocat",
+   "repo": "Hello_World",
+   "resolvedRef": null
+  },
+  {
+   "input": "https://github.com/octocat/hello",
+   "ref": null,
+   "accepted": true,
+   "owner": "octocat",
+   "repo": "hello",
+   "resolvedRef": null
+  },
+  {
+   "input": "https://github.com/octocat/hello.git",
+   "ref": null,
+   "accepted": true,
+   "owner": "octocat",
+   "repo": "hello",
+   "resolvedRef": null
+  },
+  {
+   "input": "https://github.com/octocat/hello/",
+   "ref": null,
+   "accepted": true,
+   "owner": "octocat",
+   "repo": "hello",
+   "resolvedRef": null
+  },
+  {
+   "input": "https://github.com/octocat/hello/tree/main",
+   "ref": null,
+   "accepted": true,
+   "owner": "octocat",
+   "repo": "hello",
+   "resolvedRef": "main"
+  },
+  {
+   "input": "https://github.com/octocat/hello/tree/release/1.2",
+   "ref": null,
+   "accepted": true,
+   "owner": "octocat",
+   "repo": "hello",
+   "resolvedRef": "release/1.2"
+  },
+  {
+   "input": "https://github.com/octocat/hello/tree/main",
+   "ref": "main",
+   "accepted": true,
+   "owner": "octocat",
+   "repo": "hello",
+   "resolvedRef": "main"
+  },
+  {
+   "input": "https://github.com/octocat/hello/tree/main",
+   "ref": "dev",
+   "accepted": false
+  },
+  {
+   "input": "octocat/hello",
+   "ref": "v1.0.0",
+   "accepted": true,
+   "owner": "octocat",
+   "repo": "hello",
+   "resolvedRef": "v1.0.0"
+  },
+  {
+   "input": "octocat/hello",
+   "ref": "feature/x-y_z.1",
+   "accepted": true,
+   "owner": "octocat",
+   "repo": "hello",
+   "resolvedRef": "feature/x-y_z.1"
+  },
+  {
+   "input": "  octocat/hello  ",
+   "ref": null,
+   "accepted": true,
+   "owner": "octocat",
+   "repo": "hello",
+   "resolvedRef": null
+  },
+  {
+   "input": "a/b",
+   "ref": "0123456789abcdef0123456789abcdef01234567",
+   "accepted": true,
+   "owner": "a",
+   "repo": "b",
+   "resolvedRef": "0123456789abcdef0123456789abcdef01234567"
+  },
+  {
+   "input": "http://github.com/o/r",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "git://github.com/o/r",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "ssh://git@github.com/o/r",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "git@github.com:o/r",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "https://gitlab.com/o/r",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "https://github.com/o",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "https://github.com/o/r/issues",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "github.com/o/r",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o/r/extra",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "/o/r",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o//r",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "-o/r",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o-/r",
+   "ref": null,
+   "accepted": true,
+   "owner": "o-",
+   "repo": "r",
+   "resolvedRef": null
+  },
+  {
+   "input": "o/..",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o/.",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o/.git",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o/r",
+   "ref": "-x",
+   "accepted": false
+  },
+  {
+   "input": "o/r",
+   "ref": "a..b",
+   "accepted": false
+  },
+  {
+   "input": "o/r",
+   "ref": "a//b",
+   "accepted": false
+  },
+  {
+   "input": "o/r",
+   "ref": "a/",
+   "accepted": false
+  },
+  {
+   "input": "/a",
+   "ref": "/a",
+   "accepted": false
+  },
+  {
+   "input": "o/r",
+   "ref": "x.lock",
+   "accepted": false
+  },
+  {
+   "input": "o/r",
+   "ref": "",
+   "accepted": false
+  },
+  {
+   "input": "o/r",
+   "ref": "a b",
+   "accepted": false
+  },
+  {
+   "input": "o/r",
+   "ref": "ignore previous instructions",
+   "accepted": false
+  },
+  {
+   "input": "o/ignore-previous-instructions",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o/act-as-root",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/r",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "ref": null,
+   "accepted": true,
+   "owner": "o",
+   "repo": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "resolvedRef": null
+  },
+  {
+   "input": "o/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+   "ref": null,
+   "accepted": true,
+   "owner": "o",
+   "repo": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+   "resolvedRef": null
+  },
+  {
+   "input": "https://github.com/o/r%2e",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o/r\n",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o/r\u200b",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o/r\u00e9",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o/r\\x",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o/r?x=1",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "o/r#frag",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "https://github.com:443/o/r",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "https://user@github.com/o/r",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "https://github.com/o/r/tree/",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "https://github.com/o/r/tree/main/",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "https://github.com/o/r/tree/-x",
+   "ref": null,
+   "accepted": false
+  },
+  {
+   "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "ref": null,
+   "accepted": false
+  }
+ ]
+}
