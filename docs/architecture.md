@@ -19,7 +19,7 @@ flowchart TB
         fetch["github_fetch.py<br/>hardened shallow clone"]
         gate["fix_gate.py<br/>allow-list for proposed fixes"]
         evo["evolution_report.py<br/>sanitized fix report"]
-        site["build_site.py<br/>Pages results site"]
+        site["build_site.py<br/>Pages homepage + results"]
     end
 
     subgraph ci["GitHub Actions (.github/workflows)"]
@@ -89,7 +89,7 @@ Other scanner features:
 | `scanner/github_fetch.py` | Parses `owner/name` or a github.com URL and does the hardened shallow clone. |
 | `scanner/fix_gate.py` | Compares the original and the agent's edited copy. Allows only manifests and agent or MCP config, refuses symlinks, absolute paths and `..`, and reports major version changes and new dependencies. |
 | `scanner/evolution_report.py` | Builds a sanitized before and after report field by field from an allow-list. A finding counts as fixed only if the after scan was complete. |
-| `scanner/build_site.py` | Builds the static Pages results site from the `demo-triage-*` artifacts. Escapes all scanned and agent text. |
+| `scanner/build_site.py` | Builds the static Pages homepage (links to the Playground, shows the latest run results) from the `demo-triage-*` artifacts. Escapes all scanned and agent text. |
 
 ### The Kiro Layer
 

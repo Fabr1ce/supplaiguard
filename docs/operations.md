@@ -74,7 +74,7 @@ kiro-cli chat --agent supplaiguard-coordinator "Run a full SupplAIGuard scan."
 | `demo-triage.yml` | Actions > Demo triage > Run workflow. Choose a demo and optionally `propose-fix`. | Needs `KIRO_API_KEY` for triage. Publishes Pages. |
 | `report-fix.yml` | Copy `examples/consumer-report-fix.yml`, pin both SHAs, set `SG_EVOLUTION_OPT_IN`. | Never run live. |
 
-Results from `demo-triage.yml` appear on the Pages site after the first run. Before then the site returns 404.
+The Pages root is the homepage: it leads to the Playground (`/playground/`) and shows the latest `demo-triage.yml` run lower down. The latest run results appear after the first run. Before then the site returns 404.
 
 ### Turn Off Remediation From The Playground
 

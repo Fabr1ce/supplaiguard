@@ -262,7 +262,7 @@ jobs:
   The Playground can also scan a public GitHub repository by URL through the Worker setting `SCAN_URL_ENABLED` (off unless exactly
   `"true"`; scanner only, no agent). It dispatches `scan-repo.yml` with validated inputs. URL scans are deterministic only (no agent runs on a scanned repository).
   The workflow ran live once by manual dispatch (run 45071479996); the Playground-triggered path is covered by fixtures and unit tests only. See "Scan By URL Flag" in `playground/README.md`.
-  The same run publishes the results to **GitHub Pages**, so nobody needs a GitHub login or Actions access to read
+  The same run publishes the results to **GitHub Pages** (the site root is a homepage that leads to the Playground and shows the latest run lower down), so nobody needs a GitHub login or Actions access to read
   them: a page per demo with the scanner's HTML report and the agent's triage text (escaped, shown as plain text; a
   skipped or failed triage is stated on the page). The run page also shows the findings table in its job summary.
   Used by the demo site since the Pages commits in PR #6 and #7. One-time setup: *Settings > Pages > Source: GitHub Actions*, then run the workflow.

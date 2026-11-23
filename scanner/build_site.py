@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the static results site that GitHub Pages serves, from downloaded demo-triage artifacts.
+"""Build the static site that GitHub Pages serves (the homepage plus the latest demo results), from downloaded demo-triage artifacts.
 
 Usage: build_site.py INPUT_DIR OUTPUT_DIR RUN_URL DATE   (optional environment variable DEMO_NAME)
 
@@ -23,7 +23,10 @@ import shutil
 import sys
 from pathlib import Path
 
-TITLE = "SupplAIGuard Demo Results"
+TITLE = "SupplAIGuard: Autonomous Security For AI-Native Applications"
+TAGLINE = "Autonomous security for AI-native applications."
+VERBS = "Prevent locally. Detect continuously. Remediate intelligently. Verify automatically."
+DOCS_URL = "https://github.com/Fabr1ce/supplaiguard/tree/main/docs"
 NAME_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$")
 URL_OK = re.compile(r"^(https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/actions/runs/\d+(/[A-Za-z0-9/_-]*)?$")
 RULE_OK = re.compile(r"^[A-Z]{3}-\d{3}$")
@@ -61,8 +64,21 @@ table{width:100%;border-collapse:collapse;margin-top:.5rem}
 th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--mute);font-weight:600;font-size:.85rem}
 .ok{color:var(--green)}.bad{color:var(--orange)}.dim{color:var(--mute)}
-.demo{margin:1rem 0}.demo h3{margin:0 0 .4rem}
+.demo{margin:1rem 0}.demo h4{margin:0 0 .4rem;font-size:1.05rem}
 pre{background:#0c0a12;border:1px solid var(--line);padding:1rem;overflow:auto;white-space:pre-wrap;border-radius:10px}
+a:focus-visible{outline:3px solid var(--orange);outline-offset:3px;border-radius:4px}
+.hero{margin-bottom:2.5rem}
+.hero .lead{font-size:1.25rem;font-weight:600;margin:.2rem 0 .3rem}
+.hero .verbs{color:var(--green);margin:0 0 1rem}
+.hero .what{max-width:40rem;margin:0 auto 1.25rem;color:var(--mute)}
+.btn-lg{font-size:1.15rem;padding:.9rem 1.8rem;border-radius:12px;border:2px solid var(--purple)}
+.quiet{margin:1rem 0 0}.quiet a{margin:0 .6rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(10.5rem,1fr));gap:.8rem;list-style:none;padding:0;margin:0}
+.grid li{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:.9rem 1rem}
+.grid h3{margin:0 0 .3rem;color:var(--orange);font-size:1.05rem}
+.grid p{margin:0;font-size:.92rem;color:var(--mute)}
+ul.checks{margin:0;padding-left:1.2rem}ul.checks li{margin:.3rem 0}
+.cta{text-align:center;margin-top:1.2rem}
 footer{margin-top:2.5rem;color:var(--mute);font-size:.9rem;text-align:center}
 """
 
@@ -82,6 +98,26 @@ FLOW = (
                "result. A finding counts as resolved only when a re-scan no longer reports it. The tests are not run."),
     ("Learn", "Opt-in. After a person merges a fix, a sanitized report (rule ids, severities, counts and outcome, no "
               "source or paths) can be sent upstream so the rules improve."),
+)
+LOOP = (
+    ("Discover", "The deterministic scanner checks dependencies against OSV.dev and MCP configs and agent files "
+                 "against fixed rules. Same input, same result."),
+    ("Analyze", "A Kiro agent, read-only and without shell access, connects findings across files and says what it "
+                "could not determine. Agent triage is available on the four demos."),
+    ("Remediate", "Optional and off by default. The Remediation agent proposes the smallest fix, limited to manifests, "
+                  "agent and MCP config. The result is a DRAFT pull request that a person reviews. Nothing merges "
+                  "automatically."),
+    ("Verify", "The changed copy is scanned again, and the draft pull request lists that re-check. Tests are not run, "
+               "so a person still decides."),
+    ("Learn", "Opt-in only. After a person merges a fix, a sanitized report (rule ids, severities, counts, outcome; "
+              "no source, secrets or paths) can go upstream for a maintainer to review."),
+)
+CHECKS = (
+    "MCP server configuration, such as auto-approved tools and unpinned remote packages",
+    "Agent permissions, such as wildcard tools and unrestricted shell or write access",
+    "Skills and agent instructions that try to bypass safety rules or exfiltrate data",
+    "Dependencies, checked against OSV.dev",
+    "A prompt-injection guard for scanned repositories: their text is treated as untrusted",
 )
 OPTIONAL_NOTE = ("Remediate, Verify and Learn are not tracked on this page. They happen in a separate Propose Fix job "
                  "and in your own repository, so open the workflow run to see whether Remediate ran.")
@@ -104,11 +140,15 @@ def _page(title: str, body: str, topbar: str = "") -> str:
             f"<title>{html.escape(title)}</title><style>{CSS}</style><body>{topbar}<main>{body}</main></body></html>")
 
 
-def _header(banner_src: str, h1: str) -> str:
-    return (f'<header><img src="{banner_src}" width="760" alt="SupplAIGuard: a stitched green and purple '
-            f'ghost-shield inside a five-step loop">'
-            f"<h1>{html.escape(h1)}</h1>"
-            '<p class="tag">Autonomous Security For AI-Native Applications</p></header>')
+def _hero(banner_src: str | None) -> str:
+    img = (f'<img src="{banner_src}" width="760" alt="SupplAIGuard: a stitched green and purple '
+           f'ghost-shield inside a five-step loop: Discover, Analyze, Remediate, Verify, Learn">') if banner_src else ""
+    return (f'<header class="hero">{img}<h1>SupplAIGuard</h1>'
+            f'<p class="lead">{html.escape(TAGLINE)}</p><p class="verbs">{html.escape(VERBS)}</p>'
+            '<p class="what">Pick an intentionally vulnerable demo app, launch a real SupplAIGuard run, and watch '
+            "the scan, the agent analysis and the findings in the Playground.</p>"
+            '<p><a class="btn btn-lg" href="playground/">Open The Playground</a></p>'
+            f'<p class="quiet"><a href="{{repo}}">View On GitHub</a><a href="{DOCS_URL}">Read The Docs</a></p></header>')
 
 
 def _triage_state(d: Path) -> tuple[str, str]:
@@ -215,31 +255,45 @@ def build(src: Path, out: Path, run_url: str, when: str, banner: Path | None = N
 
         rows.append(f"<tr><td><strong>{shown}</strong></td><td class=\"{copy_c}\">{copy_l}</td>"
                     f"<td class=\"{scan_c}\">{scan_l}</td><td class=\"{tri_c}\">{tri_l}</td></tr>")
-        cards.append(f'<div class="panel demo"><h3>{shown}</h3><p>{html.escape(_counts(d))}</p>'
+        cards.append(f'<div class="panel demo"><h4>{shown}</h4><p>{html.escape(_counts(d))}</p>'
                      f"<p>{' | '.join(links) or 'No reports were produced.'}</p></div>")
 
-    links_row = (' | '.join((
-        '<a href="playground/">Open The Playground</a>',
-        '<a href="https://github.com/Fabr1ce/supplaiguard/tree/main/docs">Documentation</a>',
-        f'<a href="{html.escape(repo_url, quote=True)}">Repository</a>')))
     empty = ("No demo results were found in this run. The run may have skipped the scan, or its results artifact was "
              f'missing. <a href="{html.escape(run_url, quote=True)}">Open the workflow run</a> to see which step failed.')
     flow_items = "".join(f"<li><strong>{n}</strong><br><span class=\"dim\">{html.escape(t)}</span></li>" for n, t in FLOW)
+    repo_q = html.escape(repo_url, quote=True)
+    loop_cards = "".join(f"<li><h3>{n}</h3><p>{html.escape(t)}</p></li>" for n, t in LOOP)
+    checks = "".join(f"<li>{html.escape(c)}</li>" for c in CHECKS)
+    button = '<p class="cta"><a class="btn btn-lg" href="playground/">Open The Playground</a></p>'
     body = (
-        (_header("banner.gif", TITLE) if has_banner else f"<header><h1>{html.escape(TITLE)}</h1></header>")
-        + '<div class="panel"><a class="btn" href="' + html.escape(repo_url, quote=True) + '/actions/workflows/demo-triage.yml">Run The Demo Workflow</a>'
-        '<p class="note">Starting a run needs write access to the repository, so the button opens the workflow page '
-        "on GitHub. Everyone else can read the latest results below, or fork the repository and run it there.</p></div>"
+        _hero("banner.gif" if has_banner else None).replace("{repo}", repo_q)
+        + '<section aria-labelledby="problem"><h2 id="problem">The Problem</h2><div class="panel">'
+        "<p>AI-native apps pull in MCP servers, agent permissions, skills and dependencies that ordinary scanners "
+        "miss. The risk is in the combination: an over-privileged agent, an MCP server that auto-approves every tool "
+        "and a vulnerable dependency are one attack path, not three unrelated warnings.</p></div></section>"
+        '<section aria-labelledby="how"><h2 id="how">How It Works</h2>'
+        f'<ol class="grid">{loop_cards}</ol></section>'
+        '<section aria-labelledby="checks"><h2 id="checks">What It Checks</h2>'
+        f'<div class="panel"><ul class="checks">{checks}</ul></div></section>'
+        '<section aria-labelledby="try"><h2 id="try">Try It</h2><div class="panel"><ol class="flow">'
+        "<li><strong>Open The Playground</strong><br><span class=\"dim\">It runs in your browser, with no install.</span></li>"
+        "<li><strong>Launch A Demo</strong><br><span class=\"dim\">Pick an intentionally vulnerable demo app and start a real run.</span></li>"
+        "<li><strong>Read The Results</strong><br><span class=\"dim\">See the findings and the agent analysis. A run that finishes does not mean anything was fixed.</span></li>"
+        f"</ol>{button}</div></section>"
+        '<section aria-labelledby="latest"><h2 id="latest">Latest Demo Run</h2>'
         '<p class="note">This page shows the latest run only. Each run replaces the whole page with its own results.</p>'
-        f'<p>{links_row}</p>'
-        "<h2>How The Flow Works</h2>"
-        f'<div class="panel"><ol class="flow">{flow_items}</ol><p class="note">{html.escape(OPTIONAL_NOTE)}</p></div>'
-        "<h2>What Happened In This Run</h2>"
+        f'<p class="note">Prefer GitHub? <a href="{repo_q}/actions/workflows/demo-triage.yml">Run the Demo Triage workflow</a> '
+        "there (needs write access to the repository).</p>"
+        '<h3>What Happened In This Run</h3>'
         '<div class="panel"><table><tr><th>Demo</th><th>Copy The Demo</th><th>Deterministic Scan</th><th>Agent Triage</th></tr>'
         f"{''.join(rows) or '<tr><td colspan=4 class=bad>' + empty + '</td></tr>'}</table></div>"
-        "<h2>Results</h2>" + ("".join(cards) or '<div class="panel bad">' + empty + "</div>")
-        + f'<footer>Generated {html.escape(when)} by <a href="{html.escape(run_url, quote=True)}">this workflow run</a>. '
-        "No login is needed to read this page.</footer>"
+        "<h3>Results</h3>" + ("".join(cards) or '<div class="panel bad">' + empty + "</div>")
+        + "<h3>What Each Run Does</h3>"
+        f'<div class="panel"><ol class="flow">{flow_items}</ol><p class="note">{html.escape(OPTIONAL_NOTE)}</p></div></section>'
+        + f'<footer><p>Generated {html.escape(when)} by <a href="{html.escape(run_url, quote=True)}">this workflow run</a>. '
+        "No login is needed to read this page.</p>"
+        f'<p>Released under the <a href="{repo_q}/blob/main/LICENSE">MIT license</a>. '
+        f'<a href="{repo_q}">SupplAIGuard on GitHub</a></p></footer>'
     )
     (out / "index.html").write_text(_page(TITLE, body, _topbar("") if has_mark else ""))
     (out / ".nojekyll").write_text("")

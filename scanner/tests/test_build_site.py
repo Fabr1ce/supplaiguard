@@ -99,7 +99,7 @@ def test_missing_brand_assets_degrade_gracefully(tmp_path):
     make_demo(src, "a", triage="t", exit_code="0")
     bs.build(src, out, run_url=RUN, when="d", banner=tmp_path / "no.gif", mark=tmp_path / "no.svg")
     index = (out / "index.html").read_text()
-    assert "<h1>SupplAIGuard Demo Results</h1>" in index
+    assert index.count("<h1>") == 1 and "<h1>SupplAIGuard</h1>" in index
     assert "banner.gif" not in index and "mark.svg" not in index
 
 
@@ -108,20 +108,57 @@ def test_titles_use_capital_first_letters(tmp_path):
     make_demo(src, "vulnerable-ai-app", triage="t", exit_code="0")
     bs.build(src, out, run_url=RUN, when="d")
     index = (out / "index.html").read_text()
-    assert "<title>SupplAIGuard Demo Results</title>" in index
-    assert "<h1>SupplAIGuard Demo Results</h1>" in index
+    assert "<title>SupplAIGuard: Autonomous Security For AI-Native Applications</title>" in index
     assert "Vulnerable AI App" in index
-    assert "Demo results" not in index and "Demo Results" in index
+    for h in ("The Problem", "How It Works", "What It Checks", "Try It", "Latest Demo Run", "What Each Run Does"):
+        assert f">{h}</h" in index
 
 
-def test_run_button_links_to_the_workflow_and_says_who_can_use_it(tmp_path):
+def test_homepage_leads_to_the_playground(tmp_path):
     src, out = tmp_path / "in", tmp_path / "site"
     make_demo(src, "a")
     bs.build(src, out, run_url=RUN, when="d")
     index = (out / "index.html").read_text()
-    assert 'href="https://github.com/o/r/actions/workflows/demo-triage.yml"' in index
-    assert "Run The Demo Workflow" in index
-    assert "write access" in index
+    assert 'href="playground/">Open The Playground</a>' in index
+    assert index.count('href="playground/"') == 2  # hero and Try It
+    assert index.index('href="playground/"') < index.index("Latest Demo Run")
+    assert "Autonomous security for AI-native applications." in index
+    assert "Prevent locally. Detect continuously. Remediate intelligently. Verify automatically." in index
+    assert index.count("<h1>") == 1
+    assert "<main>" in index and "<header" in index and "<nav" in index and "<footer>" in index
+    assert "<script" not in index
+    assert '<a href="https://github.com/o/r">View On GitHub</a>' in index
+    assert 'href="https://github.com/Fabr1ce/supplaiguard/tree/main/docs">Read The Docs</a>' in index
+    assert "MIT license" in index
+    assert "Run The Demo Workflow" not in index
+
+
+def test_loop_steps_appear_in_order(tmp_path):
+    src, out = tmp_path / "in", tmp_path / "site"
+    make_demo(src, "a")
+    bs.build(src, out, run_url=RUN, when="d")
+    index = (out / "index.html").read_text()
+    pos = [index.index(f"<h3>{s}</h3>") for s in ("Discover", "Analyze", "Remediate", "Verify", "Learn")]
+    assert pos == sorted(pos)
+    assert "DRAFT pull request" in index.split("Latest Demo Run")[0]
+
+
+def test_workflow_link_stays_as_the_manual_path(tmp_path):
+    src, out = tmp_path / "in", tmp_path / "site"
+    make_demo(src, "a")
+    bs.build(src, out, run_url=RUN, when="d")
+    index = (out / "index.html").read_text()
+    assert ('Prefer GitHub? <a href="https://github.com/o/r/actions/workflows/demo-triage.yml">Run the Demo Triage '
+            "workflow</a> there (needs write access to the repository).") in index
+    assert index.index("Latest Demo Run") < index.index("actions/workflows/demo-triage.yml")
+
+
+def test_no_em_dashes_anywhere(tmp_path):
+    src, out = tmp_path / "in", tmp_path / "site"
+    make_demo(src, "a", triage="t", exit_code="0")
+    bs.build(src, out, run_url=RUN, when="d")
+    assert "\u2014" not in (out / "index.html").read_text()
+    assert "\u2014" not in (out / "a" / "triage.html").read_text()
 
 
 def test_flow_lists_the_steps_in_order_with_honest_status(tmp_path):
@@ -254,6 +291,6 @@ def test_latest_run_only_and_links(tmp_path):
     bs.build(src, out, run_url=RUN, when="d")
     index = (out / "index.html").read_text()
     assert "This page shows the latest run only" in index
-    assert '<a href="playground/">Open The Playground</a>' in index
-    assert 'href="https://github.com/Fabr1ce/supplaiguard/tree/main/docs">Documentation</a>' in index
-    assert '<a href="https://github.com/o/r">Repository</a>' in index
+    assert 'href="playground/">Open The Playground</a>' in index
+    assert 'href="https://github.com/Fabr1ce/supplaiguard/tree/main/docs">Read The Docs</a>' in index
+    assert '<a href="https://github.com/o/r">View On GitHub</a>' in index

@@ -74,7 +74,7 @@ Three workflows run the same scanner with no secrets.
 | `matrix` | none | Turns the `demo` input into a list. |
 | `triage` (one per demo) | `contents: read` | Scans the untouched demo, uploads `demo-triage-<demo>`. If `KIRO_API_KEY` exists, also copies the demo, renames every `mcp.json` to `mcp.json.disabled`, wraps the findings with `wrap_untrusted` into `findings.untrusted.txt`, and runs the threat-analysis agent headless with read-only tools and deny rules. |
 | `propose-fix` | `contents: write`, `pull-requests: write` | Only if `propose-fix` is true. See [Propose Fix](#5-propose-fix-and-draft-pull-request). |
-| `publish` | `contents: read`, `actions: read` | Builds the results site with `scanner/build_site.py`, builds the Playground, uploads the Pages artifact. |
+| `publish` | `contents: read`, `actions: read` | Builds the homepage and latest run results with `scanner/build_site.py`, builds the Playground, uploads the Pages artifact. |
 | `deploy` (Deploy Results) | `pages: write`, `id-token: write` | Deploys to GitHub Pages. |
 
 **Artifacts.** `demo-triage-<demo>` holds `findings.json`, `report/report.html`, `report/summary.md`, `triage.txt`, `triage.err`, `triage.exit` and `mcp-disabled.txt`. The run page also shows the findings table in the job summary.
