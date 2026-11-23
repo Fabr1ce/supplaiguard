@@ -18,7 +18,7 @@ export default function ScanUrlCard({ onLaunch, launching, blocked }: { onLaunch
       <p className="mt-2 text-sm text-mute">
         Public GitHub repositories only. SupplAIGuard makes a shallow, read-only clone and scans it with the same deterministic scanner as the demos.
         Nothing from the repository is executed, installed or built, and no AI agent reads it. The scan runs as a GitHub Actions run in this project's
-        repository, so the run and its report are visible on GitHub. Rate limits apply: one scan per visitor per day, and one run at a time.
+        repository, so the run and its report are visible on GitHub. URL scans are deterministic only; agent triage is available on the four demos. Rate limits apply: one scan per visitor per day, and one run at a time.
       </p>
       <form
         className="mt-4 grid gap-4 sm:grid-cols-3"

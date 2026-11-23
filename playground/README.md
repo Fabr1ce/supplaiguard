@@ -54,10 +54,13 @@ Lets a visitor name a **public GitHub repository** and have SupplAIGuard scan it
 `sg_scan.py --github OWNER/REPO` and of the manual workflow `scan-repo.yml`. It uses the deterministic scanner only: no agent, no
 model, no secrets. Nothing from the scanned repository is executed, installed or built.
 
-**Status.** This path has **not run live on GitHub**. It is covered by fixtures and unit tests only (the validator against the Python
-reference, the Worker with a mocked GitHub, the results shaping, the UI services). The real GitHub dispatch, the run lookup by `run-name`
-and the artifact download for `scan-repo.yml` are unverified offline. The scanner's own URL scan has likewise never been run against a real
-repository from this environment (see `docs/status.md`).
+**Status.** `scan-repo.yml` ran live once by manual dispatch (run 45071479996: deterministic scan, summary and artifact steps succeeded; see
+`docs/status.md`). The Playground-triggered path has **not run live**. It is covered by fixtures and unit tests only (the validator against the
+Python reference, the Worker with a mocked GitHub, the results shaping, the UI services). The Worker dispatch by `launch_id`, the run lookup by
+`run-name`, the artifact download and the results shaping are unverified against real GitHub.
+
+**Deterministic only.** URL scans are deterministic only. No agent or model runs on a scanned repository, because it is untrusted and the triage
+agent needs a secret. Agent triage is available on the four demos.
 
 **Where it is set.** Only in the Worker: `SCAN_URL_ENABLED` in `worker/wrangler.toml` (both `[vars]` and `[env.dev.vars]`, default `"false"`), or in
 the Cloudflare dashboard under Settings > Variables, no deploy needed. Only the exact string `"true"` turns it on. Unset, `"false"`, `"TRUE"`, `"1"`

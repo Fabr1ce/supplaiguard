@@ -16,7 +16,7 @@ How to set up, run and troubleshoot SupplAIGuard. The flow behind each item is i
 | Worker secrets `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY` | `npx wrangler secret put` in `playground/worker` | The Worker's GitHub App login. The key must be PKCS#8. |
 | GitHub App for the Worker | GitHub Developer settings | Repository permissions `Actions: Read and write` and `Metadata: Read-only`, installed only on this repository. |
 | Worker variable `PROPOSE_FIX_ENABLED` | `playground/worker/wrangler.toml` or the Cloudflare dashboard | Off unless exactly `"true"`. Default `"false"`. |
-| Worker variables `SCAN_URL_ENABLED`, `SCAN_URL_DAILY_CAP`, `SCAN_URL_PER_CLIENT_PER_DAY`, `SCAN_URL_WORKFLOW_FILE` | same | Scan by URL from the Playground. Off unless `SCAN_URL_ENABLED` is exactly `"true"`. Defaults `"false"`, `5`, `1`, `scan-repo.yml`. Never run live. |
+| Worker variables `SCAN_URL_ENABLED`, `SCAN_URL_DAILY_CAP`, `SCAN_URL_PER_CLIENT_PER_DAY`, `SCAN_URL_WORKFLOW_FILE` | same | Scan by URL from the Playground. Off unless `SCAN_URL_ENABLED` is exactly `"true"`. Defaults `"false"`, `5`, `1`, `scan-repo.yml`. The Playground-triggered path has not run live. |
 | Worker variable `LAUNCH_ENABLED` | same | Kill switch. `"false"` stops launches without a deploy. |
 | Variable `SG_EVOLUTION_OPT_IN` = `true` | Consumer repository variables | Turns on `report-fix.yml` there. |
 | Secrets `SG_APP_ID`, `SG_APP_PRIVATE_KEY` | Consumer repository | The GitHub App installed only on the SupplAIGuard repository (`Contents` and `Pull requests` write), used by `report-fix.yml`. |
@@ -82,7 +82,7 @@ Set `PROPOSE_FIX_ENABLED` to `"false"` in the dashboard or `wrangler.toml` (then
 
 ### Turn Off Scan By URL From The Playground
 
-Set `SCAN_URL_ENABLED` to `"false"` in the dashboard or `wrangler.toml` (then redeploy). The card disappears and a repository request gets a 403. To stop it at the source, disable `scan-repo.yml` in Settings > Actions. This path has not run live on GitHub, so the first enabled launch is also its first real test: watch the run. See [`playground/README.md`](../playground/README.md).
+Set `SCAN_URL_ENABLED` to `"false"` in the dashboard or `wrangler.toml` (then redeploy). The card disappears and a repository request gets a 403. To stop it at the source, disable `scan-repo.yml` in Settings > Actions. The workflow itself ran live once by manual dispatch (run 45071479996), but the Playground-triggered path (Worker dispatch, run lookup, artifact download) has not, so the first enabled launch is its first real test: watch the run. See [`playground/README.md`](../playground/README.md).
 
 ## Troubleshooting
 
