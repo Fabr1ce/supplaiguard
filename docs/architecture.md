@@ -69,7 +69,7 @@ flowchart TB
 | `mcp.json` | MCP rules MCP-001 to MCP-005 | `insecure_mcp_configuration` |
 | `.kiro/agents/*.json` | Agent rules AGT-001 to AGT-004 | `excessive_tool_permissions` |
 | `SKILL.md`, agent and MCP strings, README, CONTRIBUTING, top level `docs/*.md`, file names, HEAD commit message | Phrase rules SKL-001 to SKL-005 and the injection detector | `suspicious_agent_skill` |
-| `package-lock.json`, `requirements*.txt` | OSV.dev batch query for every installed name and version | `vulnerable_dependency` |
+| `package-lock.json`, `uv.lock`, `poetry.lock`, `requirements*.txt` | OSV.dev batch query for every installed name and version (uv and poetry: registry packages only) | `vulnerable_dependency` |
 
 The rule catalog is [`.kiro/steering/ai-component-security-rules.md`](../.kiro/steering/ai-component-security-rules.md). Scoring follows [`.kiro/steering/severity-and-confidence.md`](../.kiro/steering/severity-and-confidence.md).
 

@@ -62,3 +62,7 @@ This page separates what is tested, what is implemented but never run live, and 
 - The current content of the live Pages site.
 
 Back to the [index](README.md).
+
+## Example Targets For Scan By URL
+
+The Playground offers two public, deliberately vulnerable multi-agent projects as one-click examples: `opena2a-org/damn-vulnerable-ai-agent` and `GenAI-Security-Project/finbot-ctf`. They are third-party projects, and clicking one only fills the form. The scanner reads `uv.lock` and `poetry.lock` (added so FinBot's dependencies are checked), covered by offline tests with a mocked OSV. Neither repository has been scanned live from the build environment, because it had no network access, so no results are claimed here.
