@@ -53,7 +53,10 @@ done
 
 # Deterministic scanner the threat-analysis and verification agents run first
 run mkdir -p "$SG_DST/scanner"
-run cp -f "$SRC"/scanner/sg_scan.py "$SG_DST/scanner/sg_scan.py"
+# sg_scan.py imports its stdlib-only sibling modules, so they travel with it.
+for m in sg_scan.py sg_guard.py github_fetch.py; do
+  run cp -f "$SRC/scanner/$m" "$SG_DST/scanner/$m"
+done
 
 # Agent prompts (referenced relatively as ./prompts/*.md)
 run cp -f "$SRC"/.kiro/agents/prompts/*.md "$AGENTS_DST/prompts/"

@@ -72,9 +72,21 @@ kiro-cli chat --agent supplaiguard-coordinator "Run a full SupplAIGuard scan."
 | `scan.yml` in your repository | Copy `examples/consumer-workflow.yml` and pin `uses:` and `sg-ref` to the same full commit SHA. | Branches and tags are rejected unless `allow-unpinned` is set. |
 | `scan-repo.yml` | Actions > Scan a public GitHub repo > Run workflow (`repo`, `ref`). | Public repositories on github.com only. |
 | `demo-triage.yml` | Actions > Demo triage > Run workflow. Choose a demo and optionally `propose-fix`. | Needs `KIRO_API_KEY` for triage. Publishes Pages. |
+| `remediate.yml` in your repository | Copy `examples/consumer-remediate.yml`, pin both SHAs to a commit that contains `remediate.yml`, add `KIRO_API_KEY`, tick "Allow GitHub Actions to create and approve pull requests". Run it manually. | Opens a draft PR on `supplaiguard/fix-<run id>`. Never run live. |
 | `report-fix.yml` | Copy `examples/consumer-report-fix.yml`, pin both SHAs, set `SG_EVOLUTION_OPT_IN`. | Never run live. |
 
 The Pages root is the homepage: it leads to the Playground (`/playground/`) and shows the latest `demo-triage.yml` run lower down. The latest run results appear after the first run. Before then the site returns 404.
+
+### Run The Whole Loop On Your Own Repository
+
+The loop has five steps, and each one is a separate workflow file in the consumer repository, so a problem in one cannot break the others.
+
+1. **Scan and triage.** `examples/consumer-workflow.yml` (calls `scan.yml`). Uncomment `agent-triage: true` and pass `KIRO_API_KEY` to get the triage text.
+2. **Remediate and verify.** `examples/consumer-remediate.yml` (calls `remediate.yml`). Run it manually. It opens a draft PR on `supplaiguard/fix-<run id>`. The PR body shows the scanner re-check: complete or not, fixed rule ids, what is still open.
+3. **Review.** A person reads the draft, approves and merges it. Nothing merges automatically.
+4. **Learn.** `examples/consumer-report-fix.yml` (calls `report-fix.yml`) runs when that PR closes as merged. It needs the `SG_EVOLUTION_OPT_IN` variable and the `SG_APP_ID` and `SG_APP_PRIVATE_KEY` secrets, and it opens a sanitized report pull request on this repository.
+
+Pin every `uses:` and `sg-ref` in these files to one full commit SHA of this repository that contains `remediate.yml`. A commit from before that file existed makes the remediate run fail at load. The tests of the consumer repository are not run by any step, and the Playground does not start `remediate.yml`.
 
 ### Turn Off Remediation From The Playground
 

@@ -120,9 +120,10 @@ The agent definitions are `.kiro/agents/*.json` and the prompts are `.kiro/agent
 | `self-scan.yml` | push to `main`, pull request, manual | Scans `.kiro` of this repository through `scan.yml`. |
 | `scan-repo.yml` | manual | Scans any public GitHub repository. |
 | `demo-triage.yml` | manual (also started by the Worker) | Scans a demo, runs headless triage, optionally proposes a fix, publishes the Pages site. |
+| `remediate.yml` | `workflow_call` | Reusable fix loop for any repository: scan, Remediation agent in a copy, deterministic gate, re-scan to verify, draft pull request. Never run live. |
 | `report-fix.yml` | `workflow_call` | Opt-in report of a merged fix back to this repository. |
 
-`examples/consumer-workflow.yml` and `examples/consumer-report-fix.yml` show how another repository calls `scan.yml` and `report-fix.yml`.
+`examples/consumer-workflow.yml`, `examples/consumer-remediate.yml` and `examples/consumer-report-fix.yml` show how another repository calls `scan.yml`, `remediate.yml` and `report-fix.yml`.
 
 ### The Demos
 

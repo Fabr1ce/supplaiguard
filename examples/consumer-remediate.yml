@@ -1,0 +1,30 @@
+# OPTIONAL. Copy to  .github/workflows/supplaiguard-remediate.yml
+#
+# Runs the Remediation agent on demand: it proposes fixes in a copy of your repository, a deterministic gate allows only
+# manifests, agent configs, MCP config and SKILL.md, the scanner re-checks the fixed tree, and a DRAFT pull request is opened
+# on a `supplaiguard/fix-*` branch. A person reviews it. Nothing merges automatically.
+#
+# Setup
+#  1. Replace both <FULL_COMMIT_SHA> values with the SAME reviewed 40-character commit SHA of Fabr1ce/supplaiguard
+#     that contains .github/workflows/remediate.yml.
+#  2. Add the repository secret KIRO_API_KEY.
+#  3. Settings > Actions > General > Workflow permissions: tick "Allow GitHub Actions to create and approve pull requests".
+#  4. To report merged fixes back (the learning step), also copy examples/consumer-report-fix.yml.
+
+name: SupplAIGuard remediate
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  remediate:
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: Fabr1ce/supplaiguard/.github/workflows/remediate.yml@<FULL_COMMIT_SHA>
+    with:
+      sg-ref: <FULL_COMMIT_SHA>
+    secrets:
+      KIRO_API_KEY: ${{ secrets.KIRO_API_KEY }}

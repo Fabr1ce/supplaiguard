@@ -25,12 +25,16 @@ import shutil
 import subprocess
 import sys
 import textwrap
-import tomllib
 import urllib.request
 from datetime import date, datetime, timezone
 from pathlib import Path
 
 import sg_guard  # sibling module, stdlib only
+
+try:  # Python 3.11+. On 3.10 the scan still runs; uv.lock and poetry.lock are reported as not analysed.
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - depends on the interpreter
+    tomllib = None
 
 VERSION = "0.2.0"
 SEV_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
@@ -404,6 +408,9 @@ def python_lock_packages(scan: Scan, p: Path) -> set[tuple[str, str]]:
     uv marks the project itself and local or git packages with a non-registry `source`; those are not on PyPI,
     so they are skipped rather than sent to OSV as if they were.
     """
+    if tomllib is None:
+        scan.error(rel(scan, p), "discovery", "reading this lockfile needs Python 3.11 or newer; dependencies NOT checked")
+        return set()
     try:
         data = tomllib.loads(read_capped(p, errors="ignore"))
     except tomllib.TOMLDecodeError as e:

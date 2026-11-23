@@ -75,3 +75,11 @@ def test_offline_mode_says_cves_were_not_checked(tmp_path):
     (tmp_path / "uv.lock").write_text(UV_LOCK)
     out = sg_scan.run_scan(tmp_path, offline=True, environment="local")
     assert any("NOT checked" in e["message"] for e in out["errors"])
+
+
+def test_without_tomllib_the_lockfile_is_an_error_not_clean(tmp_path, monkeypatch):
+    (tmp_path / "uv.lock").write_text(UV_LOCK)
+    monkeypatch.setattr(sg_scan, "tomllib", None)
+    out = sg_scan.run_scan(tmp_path, environment="local")
+    assert any(e["source"] == "uv.lock" and "3.11" in e["message"] for e in out["errors"])
+    assert sg_scan.exit_code(out) == 2
