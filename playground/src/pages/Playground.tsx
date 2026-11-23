@@ -77,7 +77,7 @@ export default function Playground() {
         <img src={`${import.meta.env.BASE_URL}banner.gif`} width={800} height={400} alt="SupplAIGuard: a stitched green and purple ghost-shield inside a five-step loop" className="mx-auto mb-6 h-auto w-full max-w-[760px] rounded-2xl" />
         <p className="text-sm text-green">SupplAIGuard Security Playground</p>
         <motion.h1 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mx-auto mt-2 max-w-3xl text-4xl font-semibold tracking-tight sm:text-5xl">
-          Watch AI <span className="shimmer">find it</span>. See what it <span className="shimmer">reports</span>.
+          Watch AI <span className="shimmer">find it</span> and <span className="shimmer">fix it</span>
         </motion.h1>
         <p className="mx-auto mt-4 max-w-2xl text-mute">
           Explore real security problems in AI-native apps. Launch a SupplAIGuard run, follow the deterministic scan and the
