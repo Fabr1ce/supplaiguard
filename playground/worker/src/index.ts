@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { DEMOS, isDemoId, LAUNCH_ID_RE, type DemoId } from "./demos";
 import { dispatch, dispatchPrivate, dispatchScanUrl, findRun, getArtifactZip, getJobs, getRun, GitHubError, scanWorkflowFile } from "./github";
-import { parseArtifact, parseFixArtifact, parseScanArtifact } from "./results";
+import { parseArtifact, parseFixArtifact, parsePrivateArtifact, parseScanArtifact, PRIVATE_REPORT_ARTIFACT, type PrivateResult } from "./results";
 import { privateDemoId, privateTarget } from "./privateDemo";
 import { parseLaunchRequest } from "./validate";
 import type { LimitConfig } from "./limits";
@@ -182,6 +182,19 @@ export default {
 
         // results
         if (!run || st.status !== "completed") return err(env, req, 409, "not_ready", "The run has not finished.");
+        if (priv) {
+          // Missing, expired or unreadable report: "incomplete", never "clean" and never an error page.
+          let zip: Uint8Array | null = null;
+          let downloadFailed = false;
+          try {
+            zip = await getArtifactZip(env, run.id, PRIVATE_REPORT_ARTIFACT, priv);
+          } catch (e) {
+            downloadFailed = true;
+            console.error("private artifact failed", e instanceof GitHubError ? e.message : e);
+          }
+          const shaped: PrivateResult = parsePrivateArtifact(zip, st.conclusion, downloadFailed);
+          return json(env, req, { launchId: id, demoId: launch.demo, runUrl: run.html_url, ...shaped });
+        }
         if (isScan) {
           const sz = await getArtifactZip(env, run.id, "supplaiguard-report");
           if (!sz) return err(env, req, 404, "no_artifact", "No results were saved for this run (they may have expired).");
