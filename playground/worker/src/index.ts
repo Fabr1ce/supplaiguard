@@ -1,7 +1,8 @@
 import type { Env } from "./env";
 import { DEMOS, isDemoId, LAUNCH_ID_RE, type DemoId } from "./demos";
-import { dispatch, dispatchScanUrl, findRun, getArtifactZip, getJobs, getRun, GitHubError, scanWorkflowFile } from "./github";
+import { dispatch, dispatchPrivate, dispatchScanUrl, findRun, getArtifactZip, getJobs, getRun, GitHubError, scanWorkflowFile } from "./github";
 import { parseArtifact, parseFixArtifact, parseScanArtifact } from "./results";
+import { privateDemoId, privateTarget } from "./privateDemo";
 import { parseLaunchRequest } from "./validate";
 import type { LimitConfig } from "./limits";
 
@@ -51,6 +52,8 @@ function limitConfig(env: Env): LimitConfig {
     proposeFixPerClientPerDay: n(env.PROPOSE_FIX_PER_CLIENT_PER_DAY ?? "", 1),
     scanUrlDailyCap: n(env.SCAN_URL_DAILY_CAP ?? "", 5),
     scanUrlPerClientPerDay: n(env.SCAN_URL_PER_CLIENT_PER_DAY ?? "", 1),
+    privateDemoDailyCap: n(env.PRIVATE_DEMO_DAILY_CAP ?? "", 6),
+    privateDemoPerClientPerDay: n(env.PRIVATE_DEMO_PER_CLIENT_PER_DAY ?? "", 2),
   };
 }
 
@@ -79,7 +82,7 @@ export default {
 
     try {
       if (url.pathname === "/api/health" && req.method === "GET") {
-        return json(env, req, { ok: true, launchEnabled: env.LAUNCH_ENABLED !== "false", proposeFixEnabled: proposeFixEnabled(env), scanUrlEnabled: scanUrlEnabled(env) });
+        return json(env, req, { ok: true, launchEnabled: env.LAUNCH_ENABLED !== "false", proposeFixEnabled: proposeFixEnabled(env), scanUrlEnabled: scanUrlEnabled(env), privateDemoAvailable: privateTarget(env) !== null });
       }
 
       if (url.pathname === "/api/launch" && req.method === "POST") {
@@ -92,14 +95,17 @@ export default {
         } catch {
           return err(env, req, 400, "bad_request", "Invalid JSON.");
         }
-        const parsed = parseLaunchRequest(body, { scanUrlEnabled: scanUrlEnabled(env) });
+        const parsed = parseLaunchRequest(body, { scanUrlEnabled: scanUrlEnabled(env), privateDemoId: privateDemoId(env) });
         if (!parsed.ok) return err(env, req, parsed.code === "scan_url_disabled" ? 403 : 400, parsed.code, parsed.message);
+        const priv = "privateDemo" in parsed ? privateTarget(env) : null;
+        if ("privateDemo" in parsed && !priv) return err(env, req, 503, "private_demo_unavailable", "This demo is not connected yet.");
         const scan = "scanUrl" in parsed ? parsed.scanUrl : null;
         const demoId = "demoId" in parsed ? parsed.demoId : null;
+        const launchDemo = priv ? priv.id : scan ? SCAN_URL_DEMO : demoId!;
         // The request can only ask. The Worker setting decides: with it off, the field is ignored.
         const proposeFix = "proposeFix" in parsed && parsed.proposeFix && proposeFixEnabled(env);
 
-        const r = await coord.reserve(client, scan ? SCAN_URL_DEMO : demoId!, limitConfig(env), proposeFix, scan ?? undefined);
+        const r = await coord.reserve(client, launchDemo, limitConfig(env), proposeFix, scan ?? undefined, !!priv);
         if (!r.ok) {
           const msg: Record<string, string> = {
             disabled: "Launching is switched off right now.",
@@ -110,19 +116,23 @@ export default {
             fix_daily_cap: "The daily remediation limit has been reached. A scan without remediation is still available.",
             scan_url_rate_limited: "You have used your repository scan for today. The demos are still available.",
             scan_url_daily_cap: "The daily limit for repository scans has been reached. The demos are still available.",
+            private_rate_limited: "You have used your launches of this demo for today. The other demos are still available.",
+            private_daily_cap: "The daily limit for this demo has been reached. The other demos are still available.",
           };
           const status = r.reason === "disabled" ? 503 : 429;
           return err(env, req, status, r.reason, msg[r.reason], r.retryAfterSec ? { "retry-after": String(r.retryAfterSec) } : {});
         }
         const launchId = r.launchId!;
         try {
-          if (scan) await dispatchScanUrl(env, scan.repo, scan.ref, launchId);
+          if (priv) await dispatchPrivate(env, priv, launchId);
+          else if (scan) await dispatchScanUrl(env, scan.repo, scan.ref, launchId);
           else await dispatch(env, DEMOS[demoId!].workflowDemo, launchId, proposeFix);
         } catch (e) {
           await coord.finish(launchId, true);
           console.error("dispatch failed", e instanceof Error ? e.message : e);
           return err(env, req, 502, "dispatch_failed", "Could not start the workflow. Try again shortly.");
         }
+        if (priv) return json(env, req, { launchId, demoId: priv.id, proposeFix: false, status: "queued", conclusion: null }, 202);
         if (scan) return json(env, req, { launchId, demoId: SCAN_URL_DEMO, scanUrl: scan, status: "queued", conclusion: null }, 202);
         return json(env, req, { launchId, demoId, proposeFix, status: "queued", conclusion: null }, 202);
       }
@@ -134,12 +144,16 @@ export default {
         if (!(await coord.allowRead(client, 60))) return err(env, req, 429, "rate_limited", "Too many requests.", { "retry-after": "30" });
         const launch = await coord.get(id);
         const isScan = !!launch?.scanUrl && launch.demo === SCAN_URL_DEMO;
-        if (!launch || (!isScan && !isDemoId(launch.demo))) return err(env, req, 404, "not_found", "Unknown execution.");
-        const wf = isScan ? scanWorkflowFile(env) : env.WORKFLOW_FILE;
+        if (!launch || (!isScan && !launch.privateDemo && !isDemoId(launch.demo))) return err(env, req, 404, "not_found", "Unknown execution.");
+        // A private launch is looked up in the private repository, with a token scoped to it. If the setting was
+        // removed since the launch, there is nothing safe to query.
+        const priv = launch.privateDemo ? privateTarget(env) : null;
+        if (launch.privateDemo && !priv) return err(env, req, 503, "private_demo_unavailable", "This demo is not connected yet.");
+        const wf = priv ? priv.workflowFile : isScan ? scanWorkflowFile(env) : env.WORKFLOW_FILE;
 
-        let run = launch.runId ? await getRun(env, launch.runId) : null;
+        let run = launch.runId ? await getRun(env, launch.runId, priv ?? undefined) : null;
         if (!run && !launch.runId) {
-          run = await findRun(env, id, launch.createdAt, wf);
+          run = await findRun(env, id, launch.createdAt, wf, priv ?? undefined);
           if (run) await coord.setRun(id, run.id);
         }
         const st = publicStatus(run);
@@ -147,7 +161,7 @@ export default {
         if ((st.status === "completed" || lost) && !launch.done) await coord.finish(id);
 
         if (kind === "status") {
-          const jobs = run && run.status !== "queued" ? await getJobs(env, run.id) : [];
+          const jobs = run && run.status !== "queued" ? await getJobs(env, run.id, priv ?? undefined) : [];
           return json(env, req, {
             launchId: id,
             demoId: launch.demo,
@@ -156,7 +170,7 @@ export default {
             conclusion: lost ? "failed_to_start" : st.conclusion,
             runUrl: run?.html_url ?? null,
             runId: run?.id ?? null,
-            branch: run?.head_branch ?? env.WORKFLOW_REF,
+            branch: run?.head_branch ?? priv?.ref ?? env.WORKFLOW_REF,
             workflow: wf,
             proposeFix: launch.proposeFix === true,
             createdAt: new Date(launch.createdAt).toISOString(),

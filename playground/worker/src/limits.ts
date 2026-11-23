@@ -9,6 +9,8 @@ export interface Launch {
   proposeFix?: boolean;
   /** A scan-by-URL launch. Only ever set when the Worker setting allowed it. `repo` and `ref` are the NORMALIZED, validated values. */
   scanUrl?: { repo: string; ref: string | null };
+  /** A launch of the private demo. Only ever set when the Worker has it configured. */
+  privateDemo?: boolean;
 }
 
 export interface LimitState {
@@ -26,6 +28,10 @@ export interface LimitState {
   urlDaily?: Record<string, number>;
   /** hashed client -> scan-by-URL launch timestamps (ms) */
   urlClients?: Record<string, number[]>;
+  /** UTC day -> number of private demo launches (absent in state saved before the private demo existed) */
+  privDaily?: Record<string, number>;
+  /** hashed client -> private demo launch timestamps (ms) */
+  privClients?: Record<string, number[]>;
 }
 
 export interface LimitConfig {
@@ -41,11 +47,14 @@ export interface LimitConfig {
   /** Scan-by-URL launches also count against the normal limits; these are the extra, tighter ones. */
   scanUrlDailyCap?: number;
   scanUrlPerClientPerDay?: number;
+  /** Private demo launches also count against the normal limits; these are the extra, tighter ones. */
+  privateDemoDailyCap?: number;
+  privateDemoPerClientPerDay?: number;
 }
 
 export type Decision =
   | { ok: true; state: LimitState }
-  | { ok: false; reason: "disabled" | "busy" | "rate_limited" | "daily_cap" | "fix_rate_limited" | "fix_daily_cap" | "scan_url_rate_limited" | "scan_url_daily_cap"; retryAfterSec?: number };
+  | { ok: false; reason: "disabled" | "busy" | "rate_limited" | "daily_cap" | "fix_rate_limited" | "fix_daily_cap" | "scan_url_rate_limited" | "scan_url_daily_cap" | "private_rate_limited" | "private_daily_cap"; retryAfterSec?: number };
 
 export const emptyState = (): LimitState => ({ launches: {}, active: null, daily: {}, clients: {} });
 export const utcDay = (t: number) => new Date(t).toISOString().slice(0, 10);
@@ -90,6 +99,14 @@ export function decideLaunch(
     if ((s.urlDaily?.[day] ?? 0) >= (cfg.scanUrlDailyCap ?? 5)) return { ok: false, reason: "scan_url_daily_cap" };
   }
 
+  const privRecent = (s.privClients?.[client] ?? []).filter((t) => now - t < dayMs);
+  if (launch.privateDemo) {
+    if (privRecent.length >= (cfg.privateDemoPerClientPerDay ?? 2)) {
+      return { ok: false, reason: "private_rate_limited", retryAfterSec: Math.ceil((dayMs - (now - privRecent[0])) / 1000) };
+    }
+    if ((s.privDaily?.[day] ?? 0) >= (cfg.privateDemoDailyCap ?? 6)) return { ok: false, reason: "private_daily_cap" };
+  }
+
   const launches: Record<string, Launch> = {};
   for (const [id, l] of Object.entries(s.launches)) if (now - l.createdAt < cfg.retainMs) launches[id] = l;
   launches[launch.id] = launch;
@@ -118,9 +135,17 @@ export function decideLaunch(
   if (launch.scanUrl) urlClients[client] = [...urlRecent, launch.createdAt];
   const urlDaily = { [day]: (s.urlDaily?.[day] ?? 0) + (launch.scanUrl ? 1 : 0) };
 
+  const privClients: Record<string, number[]> = {};
+  for (const [c, ts] of Object.entries(s.privClients ?? {})) {
+    const kept = ts.filter((t) => now - t < dayMs);
+    if (kept.length) privClients[c] = kept;
+  }
+  if (launch.privateDemo) privClients[client] = [...privRecent, launch.createdAt];
+  const privDaily = { [day]: (s.privDaily?.[day] ?? 0) + (launch.privateDemo ? 1 : 0) };
+
   return {
     ok: true,
-    state: { launches, active: launch.id, daily: { [day]: (s.daily[day] ?? 0) + 1 }, clients, fixDaily, fixClients, urlDaily, urlClients },
+    state: { launches, active: launch.id, daily: { [day]: (s.daily[day] ?? 0) + 1 }, clients, fixDaily, fixClients, urlDaily, urlClients, privDaily, privClients },
   };
 }
 
@@ -153,5 +178,12 @@ export function finishLaunch(s: LimitState, id: string, refund = false): LimitSt
       );
     }
   }
-  return { ...s, launches, daily, fixDaily, urlDaily, urlClients, active: s.active === id ? null : s.active };
+  let privDaily = s.privDaily;
+  let privClients = s.privClients;
+  if (refund && l.privateDemo) {
+    const d = utcDay(l.createdAt);
+    if (privDaily?.[d]) privDaily = { ...privDaily, [d]: privDaily[d] - 1 };
+    if (privClients) privClients = Object.fromEntries(Object.entries(privClients).map(([c, ts]) => [c, ts.filter((t) => t !== l.createdAt)]));
+  }
+  return { ...s, launches, daily, fixDaily, urlDaily, urlClients, privDaily, privClients, active: s.active === id ? null : s.active };
 }
