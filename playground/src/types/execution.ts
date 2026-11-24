@@ -115,4 +115,14 @@ export interface PrivateResults {
   errorCount: number;
   runConclusion: string | null;
   scannerVersion: string;
+  /** Only for runs that asked for remediation. Counts, a fixed outcome word and catalogue rule ids only. */
+  fix?: PrivateFixOutcome;
+}
+
+export interface PrivateFixOutcome {
+  available: boolean;
+  /** Draft PR in the private repository. Visitors without access get a 404 from GitHub. */
+  prUrl: string | null;
+  gate: { ran: boolean; changedCount: number; majorCount: number; addedCount: number };
+  recheck: { outcome: "fixed" | "no_change" | "unverified" | "other"; complete: boolean | null; cleared: number; remaining: number; clearedByRule: Record<string, number> } | null;
 }

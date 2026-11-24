@@ -324,3 +324,54 @@ export function parsePrivateArtifact(zip: Uint8Array | null, conclusion: string 
     scannerVersion: usable ? str(raw.scanner_version, 20) : "",
   };
 }
+
+/** Artifact uploaded by the reusable remediate.yml (gate.json, report.json, pr-url.txt, agent text). */
+export const PRIVATE_FIX_ARTIFACT = "supplaiguard-remediation";
+
+export interface PrivateFixResult {
+  /** False when the artifact is missing, expired or unreadable. Never read as "fixed". */
+  available: boolean;
+  /** Draft PR in the private repository. Only a pull URL of that exact repository is passed on; visitors without access get a 404. */
+  prUrl: string | null;
+  /** Counts only: the private repository's file names and package names are not passed on. */
+  gate: { ran: boolean; changedCount: number; majorCount: number; addedCount: number };
+  /** The scanner re-run after the change. `cleared` and `remaining` by catalogue rule id only. */
+  recheck: { outcome: "fixed" | "no_change" | "unverified" | "other"; complete: boolean | null; cleared: number; remaining: number; clearedByRule: Record<string, number> } | null;
+}
+
+const OUTCOMES = new Set(["fixed", "no_change", "unverified"]);
+
+/**
+ * Reduces the private remediation artifact to numbers, a fixed outcome word, catalogue rule ids and a validated PR URL.
+ * The agent's text, file paths and package names never reach the public page.
+ */
+export function parsePrivateFixArtifact(zip: Uint8Array | null, owner: string, repo: string): PrivateFixResult {
+  const none: PrivateFixResult = { available: false, prUrl: null, gate: { ran: false, changedCount: 0, majorCount: 0, addedCount: 0 }, recheck: null };
+  if (!zip) return none;
+  let base: FixResult;
+  let report: any = null;
+  try {
+    base = parseFixArtifact(zip, owner, repo);
+    const files = unzipSync(zip, { filter: (f) => f.name === "report.json" && f.originalSize < 200_000 });
+    report = files["report.json"] ? JSON.parse(strFromU8(files["report.json"])) : null;
+  } catch {
+    return none;
+  }
+  const clearedByRule: Record<string, number> = {};
+  if (report && Array.isArray(report.fixed)) {
+    for (const f of report.fixed.slice(0, MAX_RULES)) {
+      const r = f && typeof f.rule_id === "string" && RULE_ID_RE.test(f.rule_id) ? f.rule_id : null;
+      const n = f && typeof f.count === "number" && f.count > 0 ? Math.min(f.count, 10_000) : 0;
+      if (r && n) clearedByRule[r] = (clearedByRule[r] ?? 0) + n;
+    }
+  }
+  const rc = base.recheck;
+  return {
+    available: true,
+    prUrl: base.prUrl,
+    gate: { ran: base.gate.ran, changedCount: base.gate.changed.length, majorCount: base.gate.major.length, addedCount: base.gate.added.length },
+    recheck: rc
+      ? { outcome: (OUTCOMES.has(rc.outcome) ? rc.outcome : "other") as "fixed" | "no_change" | "unverified" | "other", complete: rc.complete, cleared: rc.cleared, remaining: rc.remaining, clearedByRule }
+      : null,
+  };
+}

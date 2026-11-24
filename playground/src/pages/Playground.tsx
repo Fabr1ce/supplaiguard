@@ -7,7 +7,7 @@ import type { Demo } from "../types/demo";
 import DemoGrid from "../components/demos/DemoGrid";
 import ScanUrlCard from "../components/demos/ScanUrlCard";
 import ProposeFixToggle from "../components/demos/ProposeFixToggle";
-import { ApiError, apiConfigured, canLaunchPrivate, canProposeFix, canScanUrl, getHealth, launchDemo, launchRepo } from "../services/api";
+import { ApiError, apiConfigured, canLaunchPrivate, canProposeFix, canProposeFixPrivate, canScanUrl, getHealth, launchDemo, launchRepo } from "../services/api";
 import { activeRun, fromExecution, introSeen, loadRuns, markIntroSeen, saveRun } from "../services/storage";
 
 export default function Playground() {
@@ -15,6 +15,7 @@ export default function Playground() {
   const [launching, setLaunching] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fixAvailable, setFixAvailable] = useState(false);
+  const [privateFixAvailable, setPrivateFixAvailable] = useState(false); // its own Worker switch
   const [scanUrlAvailable, setScanUrlAvailable] = useState(false); // off until /api/health says otherwise
   const [privateAvailable, setPrivateAvailable] = useState<boolean | null>(null); // null while /api/health loads
   const [proposeFix, setProposeFix] = useState(false); // off by default, never remembered
@@ -27,11 +28,13 @@ export default function Playground() {
       getHealth()
         .then((h) => {
           setFixAvailable(canProposeFix(h));
+          setPrivateFixAvailable(canProposeFixPrivate(h));
           setScanUrlAvailable(canScanUrl(h));
           setPrivateAvailable(canLaunchPrivate(h));
         })
         .catch(() => {
           setFixAvailable(false);
+          setPrivateFixAvailable(false);
           setScanUrlAvailable(false);
           setPrivateAvailable(false);
         });
@@ -43,7 +46,9 @@ export default function Playground() {
     setError(null);
     setLaunching(demoId);
     try {
-      const r = await launchDemo(demoId, fixAvailable && proposeFix && (demos as Demo[]).find((d) => d.id === demoId)?.private !== true);
+      const isPrivate = (demos as Demo[]).find((d) => d.id === demoId)?.private === true;
+      // Each kind of demo has its own remediation switch in the Worker; the Worker checks it again.
+      const r = await launchDemo(demoId, proposeFix && (isPrivate ? privateFixAvailable : fixAvailable));
       const now = new Date().toISOString();
       saveRun({ launchId: r.launchId, demoId, createdAt: now, status: "queued", conclusion: null });
       nav(`/run/${r.launchId}`);
@@ -103,7 +108,7 @@ export default function Playground() {
 
       <section aria-labelledby="demos">
         <h2 id="demos" className="mb-4 text-xl font-semibold">Choose a demo</h2>
-        {fixAvailable && <div className="mb-4"><ProposeFixToggle checked={proposeFix} onChange={setProposeFix} disabled={!!launching} /></div>}
+        {(fixAvailable || privateFixAvailable) && <div className="mb-4"><ProposeFixToggle checked={proposeFix} onChange={setProposeFix} disabled={!!launching} scope={fixAvailable && privateFixAvailable ? "all" : fixAvailable ? "public" : "private"} /></div>}
         <DemoGrid demos={demos as Demo[]} runs={runs} launchingId={launching} onLaunch={onLaunch} blocked={blocked} privateAvailable={privateAvailable} />
       </section>
 

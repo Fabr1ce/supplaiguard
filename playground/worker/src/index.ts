@@ -1,7 +1,7 @@
 import type { Env } from "./env";
 import { DEMOS, isDemoId, LAUNCH_ID_RE, type DemoId } from "./demos";
 import { dispatch, dispatchPrivate, dispatchScanUrl, findRun, getArtifactZip, getJobs, getRun, GitHubError, scanWorkflowFile } from "./github";
-import { parseArtifact, parseFixArtifact, parsePrivateArtifact, parseScanArtifact, PRIVATE_REPORT_ARTIFACT, type PrivateResult } from "./results";
+import { parseArtifact, parseFixArtifact, parsePrivateArtifact, parsePrivateFixArtifact, parseScanArtifact, PRIVATE_FIX_ARTIFACT, PRIVATE_REPORT_ARTIFACT, type PrivateFixResult, type PrivateResult } from "./results";
 import { privateDemoId, privateTarget } from "./privateDemo";
 import { parseLaunchRequest } from "./validate";
 import type { LimitConfig } from "./limits";
@@ -61,6 +61,8 @@ function limitConfig(env: Env): LimitConfig {
 export const proposeFixEnabled = (env: Env) => env.PROPOSE_FIX_ENABLED === "true";
 
 /** The one switch for scanning a repository by URL. Anything but the exact string "true" means off. */
+/** Remediation for the private demo needs its own switch AND a connected private demo. */
+export const privateFixEnabled = (env: Env) => env.PRIVATE_DEMO_FIX_ENABLED === "true" && privateTarget(env) !== null;
 export const scanUrlEnabled = (env: Env) => env.SCAN_URL_ENABLED === "true";
 
 function publicStatus(run: { status: string; conclusion: string | null } | null): { status: string; conclusion: string | null } {
@@ -82,7 +84,7 @@ export default {
 
     try {
       if (url.pathname === "/api/health" && req.method === "GET") {
-        return json(env, req, { ok: true, launchEnabled: env.LAUNCH_ENABLED !== "false", proposeFixEnabled: proposeFixEnabled(env), scanUrlEnabled: scanUrlEnabled(env), privateDemoAvailable: privateTarget(env) !== null });
+        return json(env, req, { ok: true, launchEnabled: env.LAUNCH_ENABLED !== "false", proposeFixEnabled: proposeFixEnabled(env), scanUrlEnabled: scanUrlEnabled(env), privateDemoAvailable: privateTarget(env) !== null, privateDemoFixEnabled: privateFixEnabled(env) });
       }
 
       if (url.pathname === "/api/launch" && req.method === "POST") {
@@ -103,7 +105,7 @@ export default {
         const demoId = "demoId" in parsed ? parsed.demoId : null;
         const launchDemo = priv ? priv.id : scan ? SCAN_URL_DEMO : demoId!;
         // The request can only ask. The Worker setting decides: with it off, the field is ignored.
-        const proposeFix = "proposeFix" in parsed && parsed.proposeFix && proposeFixEnabled(env);
+        const proposeFix = "proposeFix" in parsed && parsed.proposeFix && (priv ? privateFixEnabled(env) : proposeFixEnabled(env));
 
         const r = await coord.reserve(client, launchDemo, limitConfig(env), proposeFix, scan ?? undefined, !!priv);
         if (!r.ok) {
@@ -124,7 +126,7 @@ export default {
         }
         const launchId = r.launchId!;
         try {
-          if (priv) await dispatchPrivate(env, priv, launchId);
+          if (priv) await dispatchPrivate(env, priv, launchId, proposeFix);
           else if (scan) await dispatchScanUrl(env, scan.repo, scan.ref, launchId);
           else await dispatch(env, DEMOS[demoId!].workflowDemo, launchId, proposeFix);
         } catch (e) {
@@ -132,7 +134,7 @@ export default {
           console.error("dispatch failed", e instanceof Error ? e.message : e);
           return err(env, req, 502, "dispatch_failed", "Could not start the workflow. Try again shortly.");
         }
-        if (priv) return json(env, req, { launchId, demoId: priv.id, proposeFix: false, status: "queued", conclusion: null }, 202);
+        if (priv) return json(env, req, { launchId, demoId: priv.id, proposeFix, status: "queued", conclusion: null }, 202);
         if (scan) return json(env, req, { launchId, demoId: SCAN_URL_DEMO, scanUrl: scan, status: "queued", conclusion: null }, 202);
         return json(env, req, { launchId, demoId, proposeFix, status: "queued", conclusion: null }, 202);
       }
@@ -193,7 +195,18 @@ export default {
             console.error("private artifact failed", e instanceof GitHubError ? e.message : e);
           }
           const shaped: PrivateResult = parsePrivateArtifact(zip, st.conclusion, downloadFailed);
-          return json(env, req, { launchId: id, demoId: launch.demo, runUrl: run.html_url, ...shaped });
+          let fix: PrivateFixResult | undefined;
+          if (launch.proposeFix) {
+            // Separate artifact. A failure here must not hide the scan results.
+            try {
+              const fz = await getArtifactZip(env, run.id, PRIVATE_FIX_ARTIFACT, priv);
+              fix = parsePrivateFixArtifact(fz, priv.owner, priv.repo);
+            } catch (e) {
+              console.error("private fix artifact failed", e instanceof GitHubError ? e.message : e);
+              fix = parsePrivateFixArtifact(null, priv.owner, priv.repo);
+            }
+          }
+          return json(env, req, { launchId: id, demoId: launch.demo, runUrl: run.html_url, ...shaped, ...(fix ? { fix } : {}) });
         }
         if (isScan) {
           const sz = await getArtifactZip(env, run.id, "supplaiguard-report");

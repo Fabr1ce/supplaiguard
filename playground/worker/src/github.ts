@@ -81,15 +81,15 @@ export async function dispatch(env: Env, demo: string, launchId: string, propose
 }
 
 /**
- * Dispatches the private demo's workflow. The ONLY input sent is launch_id: that workflow has no other inputs
- * (GitHub rejects unknown ones with 422) and no propose-fix path.
+ * Dispatches the private demo's workflow. Inputs: launch_id, plus propose_fixes only when asked for. The workflow
+ * declares both (GitHub rejects undeclared inputs with 422), and propose_fixes defaults to false there.
  */
-export async function dispatchPrivate(env: Env, target: PrivateTarget, launchId: string): Promise<void> {
+export async function dispatchPrivate(env: Env, target: PrivateTarget, launchId: string, proposeFix = false): Promise<void> {
   const token = await installationToken(env, target);
   const res = await gh(`${repoPath(env, target)}/actions/workflows/${target.workflowFile}/dispatches`, {
     token,
     method: "POST",
-    body: JSON.stringify({ ref: target.ref, inputs: { launch_id: launchId } }),
+    body: JSON.stringify({ ref: target.ref, inputs: { launch_id: launchId, ...(proposeFix ? { propose_fixes: "true" } : {}) } }),
   });
   if (res.status !== 204) throw new GitHubError(`dispatch ${res.status}`);
 }

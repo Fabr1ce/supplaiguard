@@ -72,21 +72,46 @@ kiro-cli chat --agent supplaiguard-coordinator "Run a full SupplAIGuard scan."
 | `scan.yml` in your repository | Copy `examples/consumer-workflow.yml` and pin `uses:` and `sg-ref` to the same full commit SHA. | Branches and tags are rejected unless `allow-unpinned` is set. |
 | `scan-repo.yml` | Actions > Scan a public GitHub repo > Run workflow (`repo`, `ref`). | Public repositories on github.com only. |
 | `demo-triage.yml` | Actions > Demo triage > Run workflow. Choose a demo and optionally `propose-fix`. | Needs `KIRO_API_KEY` for triage. Publishes Pages. |
-| `remediate.yml` in your repository | Copy `examples/consumer-remediate.yml`, pin both SHAs to a commit that contains `remediate.yml`, add `KIRO_API_KEY`, tick "Allow GitHub Actions to create and approve pull requests". Run it manually. | Opens a draft PR on `supplaiguard/fix-<run id>`. Never run live. |
+| `remediate.yml` in your repository | Copy `examples/consumer-remediate.yml`, pin both SHAs to a commit that contains `remediate.yml`, add `KIRO_API_KEY`, tick "Allow GitHub Actions to create and approve pull requests". Run it manually, or add it as a `fixes` job after the scan so a push with findings starts it (see Run The Whole Loop). | Opens a draft PR on `supplaiguard/fix-<run id>`. Skips while a fix PR is open and for the push that merges one. Never run live. |
 | `report-fix.yml` | Copy `examples/consumer-report-fix.yml`, pin both SHAs, set `SG_EVOLUTION_OPT_IN`. | Never run live. |
 
 The Pages root is the homepage: it leads to the Playground (`/playground/`) and shows the latest `demo-triage.yml` run lower down. The latest run results appear after the first run. Before then the site returns 404.
 
 ### Run The Whole Loop On Your Own Repository
 
-The loop has five steps, and each one is a separate workflow file in the consumer repository, so a problem in one cannot break the others.
+This is the full sequence, from a push to a merged learn report. People act in steps 4 and 8. Everything else is automatic.
 
-1. **Scan and triage.** `examples/consumer-workflow.yml` (calls `scan.yml`). Uncomment `agent-triage: true` and pass `KIRO_API_KEY` to get the triage text.
-2. **Remediate and verify.** `examples/consumer-remediate.yml` (calls `remediate.yml`). Run it manually. It opens a draft PR on `supplaiguard/fix-<run id>`. The PR body shows the scanner re-check: complete or not, fixed rule ids, what is still open.
-3. **Review.** A person reads the draft, approves and merges it. Nothing merges automatically.
-4. **Learn.** `examples/consumer-report-fix.yml` (calls `report-fix.yml`) runs when that PR closes as merged. It needs the `SG_EVOLUTION_OPT_IN` variable and the `SG_APP_ID` and `SG_APP_PRIVATE_KEY` secrets, and it opens a sanitized report pull request on this repository.
+1. **Push** to `main` of the consumer repository.
+2. **Scan.** The consumer workflow calls `scan.yml`. With findings at or above `fail-on`, the scan job fails on purpose (exit code `1`) and the report is uploaded.
+3. **Remediate and verify.** A second job in the same workflow runs only when that push scan returned `1`. It calls `remediate.yml`: the Remediation agent edits a copy, `fix_gate.py` allows only manifests, agent, skill and MCP config, the copy is re-scanned, and a **draft** PR opens on `supplaiguard/fix-<run id>`. The PR body lists the re-check and every change that needs explicit approval. With `allow-major: true`, major version bumps are among them.
+4. **Review, approve, merge.** A person reads the draft, marks it ready, **approves** it and merges it. The approval matters: `report-fix.yml` reports nothing without an approving review.
+5. **Scan again.** The merge is a push to `main`, so the scan runs again. This is the check that should pass. The remediation guard sees that this push merged a fix PR and does not start a new round. It also never opens a second fix PR while one is open.
+6. **Learn.** The PR closing as merged runs the consumer's report-fix workflow (`report-fix.yml`). It scans before and after the merge and, if the outcome is `fixed`, opens a learn PR on this repository that adds one sanitized file under `evolution/reports/`.
+7. **Validate.** The SupplAIGuard Steward, a Kiro Crew app in its own repository, checks open learn PRs every 6 hours by code. It needs one added file, the exact report schema, catalogue rule ids and no injection text. It then comments and labels the PR `learn:valid` or `learn:rejected`. It never approves or merges.
+8. **Merge the learn PR.** The maintainer merges valid learn PRs. The Steward's weekly digest shows which rules get fixed and which keep remaining.
 
-Pin every `uses:` and `sg-ref` in these files to one full commit SHA of this repository that contains `remediate.yml`. A commit from before that file existed makes the remediate run fail at load. The tests of the consumer repository are not run by any step, and the Playground does not start `remediate.yml`.
+**One-time setup in the consumer repository**
+
+| What | Where | For step |
+|---|---|---|
+| Workflow with a `check` job (`scan.yml`) and a `fixes` job (`remediate.yml`, `needs: check`, runs on push when `needs.check.outputs.exit-code == '1'`) | `.github/workflows/` | 2, 3 |
+| Report-fix workflow, a copy of `examples/consumer-report-fix.yml` | `.github/workflows/` | 6 |
+| Every `uses:` and `sg-ref` pinned to ONE full commit SHA of this repository that contains `remediate.yml` and the remediation guard | both files | all |
+| Secret `KIRO_API_KEY` | Actions secrets | 3 |
+| "Allow GitHub Actions to create and approve pull requests" ticked | Settings > Actions > General | 3 |
+| Variable `SG_EVOLUTION_OPT_IN` = `true` | Actions variables | 6 |
+| Secrets `SG_APP_ID`, `SG_APP_PRIVATE_KEY`: a GitHub App installed only on this repository with Contents and Pull requests: write | Actions secrets | 6 |
+
+**One-time setup for step 7:** install the Steward in Kiro Crew, give the Crew gateway a `GITHUB_TOKEN` limited to this repository (Pull requests and Issues: read and write, Contents: read), and resume its `learn-review` schedule. See the Steward's README.
+
+**What can stop the loop**
+
+- The re-scan in step 5 passes only if the agent fixed every finding at or above `fail-on`. Anything that needs a source code change stays open and is listed in the PR as `NEEDS HUMAN:`. The loop still reports what was fixed in step 6.
+- If OSV.dev is unreachable, the scan is incomplete (exit code `2`). No fix job runs, and nothing is called clean.
+- The fix PR is opened with the workflow's own token. GitHub does not start `pull_request` workflows for PRs opened that way, so the PR itself is not scanned. The scan in step 5 covers it after the merge.
+- Tests of the consumer repository are not run by any step.
+
+**Status.** Every piece is covered by tests here. The whole sequence has not run live: no push-triggered fix PR, approved merge, learn PR or Steward verdict has happened on GitHub yet.
 
 ### Turn Off Remediation From The Playground
 

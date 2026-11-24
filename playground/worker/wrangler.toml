@@ -27,12 +27,13 @@ SCAN_URL_WORKFLOW_FILE = "scan-repo.yml"
 
 # Private demo: a workflow in a separate PRIVATE repository, run through its own Actions. Empty repo means NOT
 # connected (launches are refused and /api/health reports privateDemoAvailable: false). See the README "Private Demo".
-PRIVATE_DEMO_REPO = ""
+PRIVATE_DEMO_REPO = "Fabr1ce/ledgerlight"
 PRIVATE_DEMO_WORKFLOW_FILE = "dependency-check.yml"
 PRIVATE_DEMO_REF = "main"
 PRIVATE_DEMO_ID = "ledgerlight"
 PRIVATE_DEMO_DAILY_CAP = "6"
 PRIVATE_DEMO_PER_CLIENT_PER_DAY = "2"
+PRIVATE_DEMO_FIX_ENABLED = "true"
 
 [[durable_objects.bindings]]
 name = "COORDINATOR"
@@ -61,7 +62,6 @@ SCAN_URL_ENABLED = "false"
 SCAN_URL_DAILY_CAP = "5"
 SCAN_URL_PER_CLIENT_PER_DAY = "1"
 SCAN_URL_WORKFLOW_FILE = "scan-repo.yml"
-PRIVATE_DEMO_REPO = "Fabr1ce/ledgerlight"
 PRIVATE_DEMO_WORKFLOW_FILE = "dependency-check.yml"
 PRIVATE_DEMO_REF = "main"
 PRIVATE_DEMO_ID = "ledgerlight"

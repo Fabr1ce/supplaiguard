@@ -74,3 +74,16 @@ describe("scan by URL", () => {
     await expect(launchRepo("o/r")).rejects.toMatchObject({ code: "scan_url_disabled", status: 403 });
   });
 });
+
+describe("canProposeFixPrivate", () => {
+  it("needs its own flag, a connected private demo and launching on", async () => {
+    const { canProposeFixPrivate } = await load();
+    const h = { ok: true, launchEnabled: true, privateDemoAvailable: true, privateDemoFixEnabled: true };
+    expect(canProposeFixPrivate(h)).toBe(true);
+    expect(canProposeFixPrivate({ ...h, privateDemoFixEnabled: undefined })).toBe(false);
+    expect(canProposeFixPrivate({ ...h, privateDemoAvailable: false })).toBe(false);
+    expect(canProposeFixPrivate({ ...h, launchEnabled: false })).toBe(false);
+    expect(canProposeFixPrivate({ ok: true, launchEnabled: true, proposeFixEnabled: true, privateDemoAvailable: true })).toBe(false);
+    expect(canProposeFixPrivate(null)).toBe(false);
+  });
+});
