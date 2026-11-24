@@ -27,3 +27,6 @@ assets/build_logo.py
 
 # Private demo repositories (separate git repos, never part of this one)
 private-demo/
+
+# Kiro Crew app (separate public repository, its own git history)
+supplaiguard-steward/

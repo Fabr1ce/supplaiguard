@@ -66,3 +66,7 @@ Back to the [index](README.md).
 ## Example Targets For Scan By URL
 
 The Playground offers two public, deliberately vulnerable multi-agent projects as one-click examples: `opena2a-org/damn-vulnerable-ai-agent` and `GenAI-Security-Project/finbot-ctf`. They are third-party projects, and clicking one only fills the form. The scanner reads `uv.lock` and `poetry.lock` (added so FinBot's dependencies are checked), covered by offline tests with a mocked OSV. Neither repository has been scanned live from the build environment, because it had no network access, so no results are claimed here.
+
+## Kiro Crew App
+
+`SupplAIGuard Steward` is a Kiro Crew app in its own repository (`Fabr1ce/supplaiguard-steward`). It runs a copy of this scanner on local checkouts the user picks, on demand or on a paused weekly schedule, keeps a history per repository, and reports new, resolved and returning findings. Its agent is read-only and may run only the steward script. Verified: the script, 13 unit tests and `kiro-cli agent validate`. Not verified: installing and running it inside Kiro Crew, which was not available in the build environment.
