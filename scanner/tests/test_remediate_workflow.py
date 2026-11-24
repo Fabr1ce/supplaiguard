@@ -38,9 +38,31 @@ def test_agent_step_has_no_write_token_and_no_shell():
     assert 'effect: deny\n              match: ["*"]' in step("Install the agents")
 
 
-def test_only_the_push_step_gets_the_token():
-    assert [name(b) for b in STEPS if "GH_TOKEN:" in b] == ["Open a DRAFT pull request"]
+def test_only_the_guard_and_the_push_step_get_the_token():
+    assert [name(b) for b in STEPS if "GH_TOKEN:" in b] == ["Do not stack fix PRs or re-fix the merge of one", "Open a DRAFT pull request"]
+    guard = step("Do not stack fix PRs")
+    # The guard only reads: plain `gh api` GETs, no method override, no fields, no git.
+    assert guard.count("gh api ") == 2 and not re.search(r"-X|--method|-f |-F |--field|git ", guard)
     assert "github.token" not in "".join(b for b in STEPS if "GH_TOKEN:" not in b)
+
+
+def test_guard_skips_when_a_fix_pr_is_open_or_this_push_merged_one():
+    guard = step("Do not stack fix PRs")
+    assert 'startswith("supplaiguard/fix-")' in guard and "merged_at != null" in guard
+    assert 'if [ "$SKIP_GUARDS" != "true" ]' in guard
+    later = STEPS[STEPS.index(guard) + 1:]
+    for b in later:
+        if name(b).startswith("Upload what the agent"):
+            assert "always()" in b
+        else:
+            assert "steps.guard.outputs.skip != 'true'" in b, name(b)
+
+
+def test_major_bumps_only_with_allow_major():
+    agent = step("Remediation agent")
+    assert "ALLOW_MAJOR: ${{ inputs.allow-major }}" in agent
+    assert "NEEDS APPROVAL:" in agent and "do not make it; list it on a line starting with NEEDS HUMAN:" in agent
+    assert re.search(r"allow-major:\n(.*\n){1,2}\s+type: boolean\n\s+default: false", TEXT)
 
 
 def test_findings_reach_the_agent_only_wrapped():
