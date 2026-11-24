@@ -177,6 +177,31 @@ sees the report but not the source.
 
 **Turn it off.** Set `PRIVATE_DEMO_REPO` to `""` and redeploy (or in the dashboard). The card shows "Not connected yet".
 
+### Remediation For The Private Demo (`PRIVATE_DEMO_FIX_ENABLED`, off by default)
+
+**What it does.** With this flag on, the "propose a fix" toggle also applies to the private demo. The Worker then dispatches
+the private workflow with `propose_fixes: "true"` as well as `launch_id`. In the private repository that input runs a second
+job, which calls the reusable `remediate.yml`. It runs the Remediation agent on a copy, gates the change with `fix_gate.py`,
+re-scans, and opens a draft pull request there. The same run therefore uploads `supplaiguard-report` (scan) and
+`supplaiguard-remediation` (fix).
+
+**Where it is set.** Only in the Worker: `PRIVATE_DEMO_FIX_ENABLED`, unset by default. Only the exact string `"true"` turns
+it on. It is independent of `PROPOSE_FIX_ENABLED`, so you can allow remediation on one kind of demo and not the other. It
+also needs a connected private demo (`PRIVATE_DEMO_REPO`). Fix launches share the remediation caps
+(`PROPOSE_FIX_DAILY_CAP`, `PROPOSE_FIX_PER_CLIENT_PER_DAY`).
+
+**What the page shows.** Counts only, because the page is public and the repository is not: how many files the gate allowed,
+how many changes need explicit approval, the re-check outcome (`fixed`, `no_change`, `unverified`), cleared and remaining
+counts, cleared counts by catalogue rule id, and the draft PR link (a 404 for visitors without access). File names, package
+names and the agent's text are never passed on. A missing or unreadable fix artifact shows "not available", never "fixed".
+
+**What the private repository needs.** The `propose_fixes` input and the `fixes` job in its workflow, both `uses:` and
+`sg-ref` pinned to a commit of this repository that contains `remediate.yml`, the `KIRO_API_KEY` secret, and the repository
+setting "Allow GitHub Actions to create and approve pull requests". The Worker's GitHub App needs no new permission: the
+private workflow opens the PR with its own `GITHUB_TOKEN`.
+
+**Status.** Covered by Worker and UI tests. Never run live.
+
 ## Laboratory Atmosphere
 
 While a run is queued or in progress, the Execution page gets a laboratory mood: a purple and green glow, occasional forked bolts behind the page, a slow arc between two electrodes, and a pulse on the running step. The storm grows as the run moves through its real steps. A successful run ends with a green "alive" glow. A failed or cancelled run fades to a dim, cold state with no celebration.

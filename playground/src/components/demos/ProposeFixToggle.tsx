@@ -1,4 +1,10 @@
-export default function ProposeFixToggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+const SCOPE_TEXT = {
+  all: "",
+  public: " Available on the four public demos only.",
+  private: " Available on the private Ledgerlight demo only.",
+} as const;
+
+export default function ProposeFixToggle({ checked, onChange, disabled, scope = "all" }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; scope?: keyof typeof SCOPE_TEXT }) {
   return (
     <div className="glass p-4 text-sm">
       <label className="flex cursor-pointer items-start gap-3">
@@ -8,7 +14,7 @@ export default function ProposeFixToggle({ checked, onChange, disabled }: { chec
           <span id="pf-help" className="mt-1 block text-mute">
             Off by default. If you turn it on, the Remediation agent edits a copy of the demo and the workflow opens a <strong>draft</strong> pull request.
             It only proposes: a fixed allow-list (dependency manifests and agent or MCP config) decides what may change, the scanner re-checks the result,
-            and a person has to review the draft. Nothing is merged automatically. Limited to one per visitor per day.
+            and a person has to review the draft. Nothing is merged automatically. Limited to one per visitor per day.{SCOPE_TEXT[scope]}
           </span>
         </span>
       </label>

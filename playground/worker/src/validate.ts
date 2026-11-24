@@ -12,8 +12,8 @@ export type LaunchFailure = {
 
 export type LaunchRequest =
   | { ok: true; demoId: DemoId; proposeFix: boolean }
-  /** The private demo. `proposeFix` is not offered for it: any value is type-checked and then ignored. */
-  | { ok: true; privateDemo: string }
+  /** The private demo. `proposeFix` is only a request: the Worker setting decides, as for the public demos. */
+  | { ok: true; privateDemo: string; proposeFix: boolean }
   /** Scan by URL. `repo` is the normalized owner/repo and `ref` the validated branch or tag: the only values ever passed on. */
   | { ok: true; scanUrl: { repo: string; ref: string | null } }
   | LaunchFailure;
@@ -49,6 +49,6 @@ export function parseLaunchRequest(body: unknown, opts: { scanUrlEnabled?: boole
   const isPrivate = !!opts.privateDemoId && o.demoId === opts.privateDemoId;
   if (!isPrivate && !isDemoId(o.demoId)) return unknownDemo;
   if ("proposeFix" in o && typeof o.proposeFix !== "boolean") return { ok: false, code: "bad_request", message: "proposeFix must be true or false." };
-  if (isPrivate) return { ok: true, privateDemo: o.demoId as string };
+  if (isPrivate) return { ok: true, privateDemo: o.demoId as string, proposeFix: o.proposeFix === true };
   return { ok: true, demoId: o.demoId as DemoId, proposeFix: o.proposeFix === true };
 }

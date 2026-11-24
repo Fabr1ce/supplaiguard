@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { strToU8, zipSync } from "fflate";
 
 vi.mock("cloudflare:workers", () => ({ DurableObject: class {} }));
@@ -147,6 +147,62 @@ describe("GET /api/results for the private demo", () => {
     getRun.mockResolvedValue(run(null, "in_progress"));
     expect((await get("/api/results/pg-0123456789ab")).status).toBe(409);
     expect(getArtifactZip).not.toHaveBeenCalled();
+  });
+  describe("with a remediation request", () => {
+    const fixZip = (prUrl: string) =>
+      zip({
+        "gate.json": JSON.stringify({ changed: ["CANARY/.kiro/agents/x.json", "package.json"], major: ["CANARY-PKG: 8 -> 9"], added: [], violations: [] }),
+        "report.json": JSON.stringify({ v: 1, outcome: "fixed", complete: true, fixed: [{ rule_id: "MCP-001", severity: "high", count: 2 }, { rule_id: "CANARY bad id", severity: "high", count: 1 }], remaining: [{ rule_id: "AGT-002", severity: "high", count: 1 }] }),
+        "pr-url.txt": prUrl,
+        "fix.txt": "CANARY-AGENT-TEXT",
+        "before.json": "CANARY-BEFORE",
+      });
+    beforeEach(() => { (launch as any).proposeFix = true; });
+    afterEach(() => { delete (launch as any).proposeFix; });
+
+    it("adds counts, a fixed outcome word, catalogue rule ids and the validated PR URL, nothing else", async () => {
+      getRun.mockResolvedValue(run("failure"));
+      getArtifactZip.mockImplementation(async (_e: unknown, _id: unknown, name: string) =>
+        name === "supplaiguard-remediation" ? fixZip("https://github.com/acme/secret-repo-name/pull/7\n") : report([f()]));
+      const text = await (await get("/api/results/pg-0123456789ab")).text();
+      const body = JSON.parse(text);
+      expect(body.status).toBe("findings");
+      expect(body.fix).toEqual({
+        available: true,
+        prUrl: "https://github.com/acme/secret-repo-name/pull/7",
+        gate: { ran: true, changedCount: 2, majorCount: 1, addedCount: 0 },
+        recheck: { outcome: "fixed", complete: true, cleared: 3, remaining: 1, clearedByRule: { "MCP-001": 2 } },
+      });
+      expect(text).not.toContain("CANARY");
+      expect(getArtifactZip).toHaveBeenCalledWith(expect.anything(), 99, "supplaiguard-remediation", expect.objectContaining({ repo: "secret-repo-name" }));
+    });
+    it("a PR URL of any other repository is dropped", async () => {
+      getRun.mockResolvedValue(run("failure"));
+      for (const u of ["https://github.com/o/r/pull/7", "https://github.com/acme/secret-repo-name/pull/7/files", "http://github.com/acme/secret-repo-name/pull/7", "https://evil.test/acme/secret-repo-name/pull/7"]) {
+        getArtifactZip.mockImplementation(async (_e: unknown, _id: unknown, name: string) => (name === "supplaiguard-remediation" ? fixZip(u) : report([f()])));
+        expect(JSON.parse(await (await get("/api/results/pg-0123456789ab")).text()).fix.prUrl, u).toBeNull();
+      }
+    });
+    it("missing or failing fix artifact: available false, and the scan results are still shown", async () => {
+      getRun.mockResolvedValue(run("failure"));
+      for (const impl of [async (_e: unknown, _i: unknown, n: string) => (n === "supplaiguard-remediation" ? null : report([f()])),
+                          async (_e: unknown, _i: unknown, n: string) => { if (n === "supplaiguard-remediation") throw new Error("zip 500 acme/secret-repo-name"); return report([f()]); },
+                          async (_e: unknown, _i: unknown, n: string) => (n === "supplaiguard-remediation" ? new Uint8Array([1, 2, 3]) : report([f()]))]) {
+        getArtifactZip.mockImplementation(impl as any);
+        const text = await (await get("/api/results/pg-0123456789ab")).text();
+        const body = JSON.parse(text);
+        expect(body).toMatchObject({ status: "findings", fix: { available: false, prUrl: null, recheck: null } });
+        expect(text).not.toContain("zip 500");
+      }
+    });
+    it("an unknown outcome word is reported as other", async () => {
+      getRun.mockResolvedValue(run("failure"));
+      const z = zip({ "report.json": JSON.stringify({ outcome: "CANARY-WORD", complete: true, fixed: [], remaining: [] }) });
+      getArtifactZip.mockImplementation(async (_e: unknown, _i: unknown, n: string) => (n === "supplaiguard-remediation" ? z : report([f()])));
+      const text = await (await get("/api/results/pg-0123456789ab")).text();
+      expect(JSON.parse(text).fix.recheck.outcome).toBe("other");
+      expect(text).not.toContain("CANARY");
+    });
   });
   it("setting removed after the launch: 503, nothing queried", async () => {
     const res = await get("/api/results/pg-0123456789ab", env({ PRIVATE_DEMO_REPO: "" }));

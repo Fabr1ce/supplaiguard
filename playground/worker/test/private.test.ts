@@ -85,7 +85,7 @@ describe("private demo: launch", () => {
     expect(body).toEqual({ launchId: "pg-0123456789ab", demoId: "ledgerlight", proposeFix: false, status: "queued", conclusion: null });
     expect(JSON.stringify(body)).not.toMatch(/acme|secret-repo-name/);
     expect(dispatch).not.toHaveBeenCalled();
-    expect(dispatchPrivate).toHaveBeenCalledWith(expect.anything(), { id: "ledgerlight", owner: "acme", repo: "secret-repo-name", workflowFile: "dependency-check.yml", ref: "main" }, "pg-0123456789ab");
+    expect(dispatchPrivate).toHaveBeenCalledWith(expect.anything(), { id: "ledgerlight", owner: "acme", repo: "secret-repo-name", workflowFile: "dependency-check.yml", ref: "main" }, "pg-0123456789ab", false);
     expect(reserve.mock.calls[0][1]).toBe("ledgerlight");
     expect(reserve.mock.calls[0][3]).toBe(false);
     expect(reserve.mock.calls[0][5]).toBe(true);
@@ -94,12 +94,37 @@ describe("private demo: launch", () => {
     await worker.fetch(post({ demoId: "other-id" }), env({ ...SET, PRIVATE_DEMO_ID: "other-id", PRIVATE_DEMO_WORKFLOW_FILE: "check.yaml", PRIVATE_DEMO_REF: "release" }));
     expect(dispatchPrivate.mock.calls[0][1]).toMatchObject({ id: "other-id", workflowFile: "check.yaml", ref: "release" });
   });
-  it("proposeFix is ignored for this demo, even when remediation is switched on", async () => {
-    const res = await worker.fetch(post({ demoId: "ledgerlight", proposeFix: true }), env({ ...SET, PROPOSE_FIX_ENABLED: "true" }));
+  it("proposeFix is ignored unless PRIVATE_DEMO_FIX_ENABLED is exactly \"true\" (the public flag does not count)", async () => {
+    const overs: Record<string, string>[] = [{}, { PROPOSE_FIX_ENABLED: "true" }, { PRIVATE_DEMO_FIX_ENABLED: "TRUE" }, { PRIVATE_DEMO_FIX_ENABLED: "1" }, { PRIVATE_DEMO_FIX_ENABLED: "false" }];
+    for (const over of overs) {
+      dispatchPrivate.mockClear();
+      reserve.mockClear();
+      const res = await worker.fetch(post({ demoId: "ledgerlight", proposeFix: true }), env({ ...SET, ...over }));
+      expect(res.status).toBe(202);
+      expect(((await res.json()) as any).proposeFix, JSON.stringify(over)).toBe(false);
+      expect(reserve.mock.calls[0][3]).toBe(false);
+      expect(dispatchPrivate.mock.calls[0][3]).toBe(false);
+    }
+  });
+  it("with PRIVATE_DEMO_FIX_ENABLED on, a fix request is reserved against the remediation caps and dispatched", async () => {
+    const res = await worker.fetch(post({ demoId: "ledgerlight", proposeFix: true }), env({ ...SET, PRIVATE_DEMO_FIX_ENABLED: "true" }));
     expect(res.status).toBe(202);
-    expect(((await res.json()) as any).proposeFix).toBe(false);
-    expect(reserve.mock.calls[0][3]).toBe(false);
-    expect(dispatchPrivate).toHaveBeenCalledTimes(1);
+    const body = (await res.json()) as any;
+    expect(body.proposeFix).toBe(true);
+    expect(JSON.stringify(body)).not.toMatch(/acme|secret-repo-name/);
+    expect(reserve.mock.calls[0][3]).toBe(true);
+    expect(reserve.mock.calls[0][5]).toBe(true);
+    expect(dispatchPrivate.mock.calls[0][3]).toBe(true);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+  it("with the flag on, a launch without proposeFix stays a plain scan", async () => {
+    await worker.fetch(post({ demoId: "ledgerlight" }), env({ ...SET, PRIVATE_DEMO_FIX_ENABLED: "true" }));
+    expect(dispatchPrivate.mock.calls[0][3]).toBe(false);
+  });
+  it("health reports privateDemoFixEnabled only when the flag is on AND the demo is connected", async () => {
+    expect((await health(env(SET))).privateDemoFixEnabled).toBe(false);
+    expect((await health(env({ PRIVATE_DEMO_FIX_ENABLED: "true" }))).privateDemoFixEnabled).toBe(false);
+    expect((await health(env({ ...SET, PRIVATE_DEMO_FIX_ENABLED: "true" }))).privateDemoFixEnabled).toBe(true);
   });
   it("a non-boolean proposeFix is still a 400", async () => {
     expect((await worker.fetch(post({ demoId: "ledgerlight", proposeFix: "true" }), env(SET))).status).toBe(400);
@@ -114,7 +139,7 @@ describe("private demo: launch", () => {
   it("the id is only accepted when the Worker passes it from its own config", () => {
     expect(parseLaunchRequest({ demoId: "ledgerlight" })).toMatchObject({ ok: false });
     expect(parseLaunchRequest({ demoId: "ledgerlight" }, { privateDemoId: null })).toMatchObject({ ok: false });
-    expect(parseLaunchRequest({ demoId: "ledgerlight" }, { privateDemoId: "ledgerlight" })).toEqual({ ok: true, privateDemo: "ledgerlight" });
+    expect(parseLaunchRequest({ demoId: "ledgerlight" }, { privateDemoId: "ledgerlight" })).toEqual({ ok: true, privateDemo: "ledgerlight", proposeFix: false });
     expect(parseLaunchRequest({ demoId: "crypt-keeper-mcp" }, { privateDemoId: "ledgerlight" })).toMatchObject({ ok: true, demoId: "crypt-keeper-mcp" });
   });
   it("limit replies are 429 with their own codes", async () => {

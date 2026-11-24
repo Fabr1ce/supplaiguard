@@ -11,6 +11,8 @@ export interface Health {
   scanUrlEnabled?: boolean;
   /** Absent on an older Worker: treated as not connected. The Worker never says which repository. */
   privateDemoAvailable?: boolean;
+  /** Remediation for the private demo, behind its own Worker switch. Absent on an older Worker: treated as off. */
+  privateDemoFixEnabled?: boolean;
 }
 
 /** A private demo card is launchable only when the service says it is connected, and launching is on. */
@@ -20,6 +22,9 @@ export const canLaunchPrivate = (h: Health | null | undefined) => h?.privateDemo
 export const canScanUrl = (h: Health | null | undefined) => h?.scanUrlEnabled === true && h.launchEnabled;
 
 /** The toggle is shown only when the service says remediation is available. */
+/** Remediation for the private demo: its own switch, and only when the demo itself can be launched. */
+export const canProposeFixPrivate = (h: Health | null | undefined) => h?.privateDemoFixEnabled === true && canLaunchPrivate(h);
+
 export const canProposeFix = (h: Health | null | undefined) => h?.proposeFixEnabled === true && h.launchEnabled;
 
 export const apiConfigured = BASE !== "";

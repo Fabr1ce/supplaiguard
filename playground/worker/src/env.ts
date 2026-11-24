@@ -37,4 +37,9 @@ export interface Env {
   PRIVATE_DEMO_ID?: string;
   PRIVATE_DEMO_DAILY_CAP?: string;
   PRIVATE_DEMO_PER_CLIENT_PER_DAY?: string;
+  /**
+   * Remediation for the private demo: the run also opens a draft PR in the private repository. Its own switch, off
+   * unless exactly "true", independent of PROPOSE_FIX_ENABLED. Shares the remediation caps (PROPOSE_FIX_*).
+   */
+  PRIVATE_DEMO_FIX_ENABLED?: string;
 }
